@@ -34,6 +34,26 @@ spec:
                 secretKeyRef:
                   name: hyperframes-api
                   key: RENDER_API_TOKEN
+            - name: SPEECH_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-speech-config
+                  key: SPEECH_MODE
+            - name: SPEECH_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-speech-config
+                  key: SPEECH_ENDPOINT
+            - name: SPEECH_VOICE
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-speech-config
+                  key: SPEECH_VOICE
+            - name: SPEECH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hyperframes-speech-key
+                  key: SPEECH_KEY
           resources:
             requests:
               cpu: 500m

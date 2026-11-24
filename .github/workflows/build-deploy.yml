@@ -1,11 +1,15 @@
+
 name: Build and deploy HyperFrames renderer
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
   packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,59 +17,126 @@ jobs:
       image: ${{ steps.image.outputs.value }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Set image name
         id: image
         shell: bash
         run: |
           echo "value=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push container
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.image.outputs.value }}
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
     environment: development
     steps:
       - uses: actions/checkout@v4
+
       - name: Install OpenShift client
+        shell: bash
         run: |
+          set -euo pipefail
           curl -fsSL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz -o oc.tar.gz
           tar -xzf oc.tar.gz oc
           sudo mv oc /usr/local/bin/oc
-      - name: Deploy image
+
+      - name: Deploy image and Azure Speech configuration
+        shell: bash
         env:
           OPENSHIFT_SERVER: ${{ vars.OPENSHIFT_SERVER }}
           OPENSHIFT_NAMESPACE: ${{ vars.OPENSHIFT_NAMESPACE }}
           OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
           RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
+          SPEECH_MODE: ${{ vars.SPEECH_MODE }}
+          SPEECH_ENDPOINT: ${{ vars.SPEECH_ENDPOINT }}
+          SPEECH_VOICE: ${{ vars.SPEECH_VOICE }}
+          SPEECH_KEY: ${{ secrets.SPEECH_KEY }}
           IMAGE: ${{ needs.build.outputs.image }}
         run: |
           set -euo pipefail
+
+          : "${OPENSHIFT_SERVER:?Missing development variable OPENSHIFT_SERVER}"
+          : "${OPENSHIFT_TOKEN:?Missing development secret OPENSHIFT_TOKEN}"
+          : "${IMAGE:?Missing built container image}"
+
           oc login --server="$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN"
           oc project "${OPENSHIFT_NAMESPACE:-edward-jing-dev}"
-          # Create or update API authentication in OpenShift from the GitHub Environment secret.
-          # Never print this value or place it in the container image.
+
+          # Preserve existing renderer API authentication.
           if [ "${#RENDER_API_TOKEN}" -lt 20 ]; then
-            echo "Error: development secret RENDER_API_TOKEN must contain at least 20 characters" >&2
+            echo "Error: RENDER_API_TOKEN must contain at least 20 characters" >&2
             exit 1
           fi
+
           printf '%s' "$RENDER_API_TOKEN" | \
             oc create secret generic hyperframes-api \
               --from-file=RENDER_API_TOKEN=/dev/stdin \
               --dry-run=client -o yaml | oc apply -f -
-          # A private GHCR image still requires the ghcr-pull imagePullSecret.
+
+          # Configure Azure Speech.
+          SPEECH_MODE="${SPEECH_MODE:-disabled}"
+          SPEECH_VOICE="${SPEECH_VOICE:-en-US-JennyNeural}"
+
+          case "$SPEECH_MODE" in
+            azure)
+              : "${SPEECH_ENDPOINT:?Missing SPEECH_ENDPOINT}"
+              : "${SPEECH_KEY:?Missing SPEECH_KEY}"
+
+              case "$SPEECH_ENDPOINT" in
+                https://*) ;;
+                *)
+                  echo "Error: SPEECH_ENDPOINT must start with https://" >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+            disabled)
+              # Silent video rendering remains supported.
+              ;;
+            *)
+              echo "Error: unsupported SPEECH_MODE" >&2
+              exit 1
+              ;;
+          esac
+
+          # Create or update non-secret Speech configuration.
+          oc create configmap hyperframes-speech-config \
+            --from-literal=SPEECH_MODE="$SPEECH_MODE" \
+            --from-literal=SPEECH_ENDPOINT="${SPEECH_ENDPOINT:-}" \
+            --from-literal=SPEECH_VOICE="$SPEECH_VOICE" \
+            --dry-run=client -o yaml | oc apply -f -
+
+          # Create or update the Azure Speech credential.
+          if [ "$SPEECH_MODE" = "azure" ]; then
+            printf '%s' "$SPEECH_KEY" | \
+              oc create secret generic hyperframes-speech-key \
+                --from-file=SPEECH_KEY=/dev/stdin \
+                --dry-run=client -o yaml | oc apply -f -
+          fi
+
+          # Private GHCR images require ghcr-pull.
           oc apply -f openshift/deployment.yaml
-          oc set image deployment/elearning-hyperframes-renderer renderer="$IMAGE"
-          # Refresh env vars sourced from the Secret even when only the token changes.
+
+          oc set image deployment/elearning-hyperframes-renderer \
+            renderer="$IMAGE"
+
+          # Reload configuration and secrets.
           oc rollout restart deployment/elearning-hyperframes-renderer
-          oc rollout status deployment/elearning-hyperframes-renderer --timeout=8m
+
+          oc rollout status deployment/elearning-hyperframes-renderer \
+            --timeout=8m
+
           oc get route elearning-hyperframes-renderer

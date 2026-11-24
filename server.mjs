@@ -1,3 +1,6 @@
+import { synthesizeWav } from './src/speech/azure-speech.mjs';
+import { makeNarration, validateNarrationRequest } from './src/services/narration-builder.mjs';
+import { wavDuration, addNarrationAudio } from './src/services/audio-composition.mjs';
 import { compileKafkaComposition, parseSequenceDiagram } from './src/loaders/diagram-loader.mjs';
 import { parseReviewMarkdown } from './src/loaders/markdown-loader.mjs';
 import http from 'node:http';
@@ -70,46 +73,55 @@ function safeAuth(req) {
 }
 function info(job) {
   const { id, status, created_at, finished_at, error } = job;
-  return { job_id:id, template: job.template, document: job.documentId || null, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
+  return { job_id:id, template: job.template, document: job.documentId || null, narration_enabled: job.narration.enabled, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
 }
-function renderNext() {
+// Preserve the original single-worker queue, REST paths, and HyperFrames CLI invocation.
+async function renderNext() {
   if (active || !queue.length) return;
   const job = queue.shift();
   active = true;
   job.status = 'running';
-  const work = path.join(DATA, job.id, 'composition');
-  const output = path.join(DATA, job.id, 'review.mp4');
-  // Copy a trusted, allowlisted HTML composition into a per-job working directory.
-  // The CLI renders index.html within its current working directory.
+  const jobRoot = path.join(DATA, job.id);
+  const work = path.join(jobRoot, 'composition');
+  const output = path.join(jobRoot, 'review.mp4');
+  const logPath = path.join(jobRoot, 'render.log');
+  const writeLog = (message) => fs.appendFileSync(logPath, String(message) + '\n');
   try {
-    fs.mkdirSync(path.join(work, 'assets'), { recursive: true });
-    fs.writeFileSync(path.join(work, 'index.html'), getCompositionHtml(job.template,job.documentId));
-    fs.copyFileSync(path.join(COMPOSITION, 'assets', 'gsap.min.js'), path.join(work, 'assets', 'gsap.min.js'));
-  } catch (err) {
-    job.status = 'failed'; job.error = `Could not stage composition: ${err.message}`;
-    job.finished_at = new Date().toISOString();
-    active = false; renderNext(); return;
-  }
-  const args = ['render', '--output', output, '--quality', 'draft'];
-  const child = spawn(BIN, args, {
-    cwd: work,
-    env: { ...process.env, CI: 'true' },
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  const logFile = fs.createWriteStream(path.join(DATA, job.id, 'render.log'), { flags: 'a' });
-  const append = data => logFile.write(data);
-  child.stdout.on('data', append);
-  child.stderr.on('data', append);
-  child.on('error', err => { job.error = err.message; });
-  child.on('close', async (code) => {
-    logFile.end();
-    job.status = code === 0 && fs.existsSync(output) ? 'completed' : 'failed';
-    if (job.status === 'failed') job.error = job.error || `HyperFrames exited with code ${code}; see pod logs/render.log`;
-    job.finished_at = new Date().toISOString();
-    await fsp.writeFile(path.join(DATA, job.id, 'status.json'), JSON.stringify(info(job), null, 2)).catch(() => {});
-    active = false;
+    await fsp.mkdir(path.join(work,'assets'), {recursive:true});
+    let html = getCompositionHtml(job.template, job.documentId);
+    await fsp.copyFile(path.join(COMPOSITION,'assets','gsap.min.js'),path.join(work,'assets','gsap.min.js'));
+    if (job.narration.enabled) {
+      const text = job.narration.text || makeNarration({template:job.template,documentId:job.documentId,reviewDir:REVIEW_DIR,diagramDir:DIAGRAM_DIR});
+      writeLog(`[speech] Synthesizing ${text.length} characters using configured SPEECH_ENDPOINT and SPEECH_VOICE`);
+      const file=path.join(work,'assets','narration.wav');
+      await synthesizeWav(text,file);
+      const duration=await wavDuration(file);
+      html=addNarrationAudio(html,duration);
+      writeLog(`[speech] WAV ready; duration=${duration.toFixed(2)}s`);
+    }
+    await fsp.writeFile(path.join(work,'index.html'),html);
+    writeLog('[render] Starting HyperFrames CLI');
+    const code = await new Promise((resolve,reject) => {
+      const child=spawn(BIN,['render','--output',output,'--quality','draft'],{
+        cwd:work, env:{...process.env,CI:'true'},stdio:['ignore','pipe','pipe']
+      });
+      const log=fs.createWriteStream(logPath,{flags:'a'});
+      child.stdout.pipe(log,{end:false});
+      child.stderr.pipe(log,{end:false});
+      child.once('error',reject);
+      child.once('close',(exitCode)=>{log.end();resolve(exitCode);});
+    });
+    if (code!==0 || !fs.existsSync(output)) throw new Error(`HyperFrames exited with code ${code}; see render.log`);
+    job.status='completed';
+  } catch(err) {
+    job.status='failed'; job.error=err.message;
+    writeLog(`[error] ${err.message}`);
+  } finally {
+    job.finished_at=new Date().toISOString();
+    await fsp.writeFile(path.join(jobRoot,'status.json'),JSON.stringify(info(job),null,2)).catch(()=>{});
+    active=false;
     renderNext();
-  });
+  }
 }
 function staticFile(res, file, contentType) {
   const stream = fs.createReadStream(file);
@@ -172,9 +184,14 @@ http.createServer(async (req,res) => {
       // Validate source before enqueueing to avoid late failures.
       try { getCompositionHtml(template, documentId); }
       catch(err) { return sendJson(res,400,{error:'Invalid template source',detail:err.message}); }
+      let narration;
+      try { narration=validateNarrationRequest(config.narration); }
+      catch(err) { return sendJson(res,400,{error:err.message}); }
+      if (narration.enabled && (process.env.SPEECH_MODE !== 'azure' || !process.env.SPEECH_KEY || !process.env.SPEECH_ENDPOINT))
+        return sendJson(res,503,{error:'Azure Speech is not configured (SPEECH_MODE, SPEECH_KEY, SPEECH_ENDPOINT)'});
       const id = crypto.randomUUID();
       await fsp.mkdir(path.join(DATA,id), { recursive:true });
-      const job = { id, template, documentId, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
+      const job = { id, template, documentId, narration, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
       jobs.set(id, job); queue.push(job); renderNext();
       return sendJson(res, 202, info(job));
     }
