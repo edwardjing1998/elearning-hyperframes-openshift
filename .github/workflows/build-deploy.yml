@@ -46,13 +46,26 @@ jobs:
           OPENSHIFT_SERVER: ${{ vars.OPENSHIFT_SERVER }}
           OPENSHIFT_NAMESPACE: ${{ vars.OPENSHIFT_NAMESPACE }}
           OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+          RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
           IMAGE: ${{ needs.build.outputs.image }}
         run: |
           set -euo pipefail
           oc login --server="$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN"
           oc project "${OPENSHIFT_NAMESPACE:-edward-jing-dev}"
-          # The hyperframes-api Secret and ghcr-pull image pull secret must be created once.
+          # Create or update API authentication in OpenShift from the GitHub Environment secret.
+          # Never print this value or place it in the container image.
+          if [ "${#RENDER_API_TOKEN}" -lt 20 ]; then
+            echo "Error: development secret RENDER_API_TOKEN must contain at least 20 characters" >&2
+            exit 1
+          fi
+          printf '%s' "$RENDER_API_TOKEN" | \
+            oc create secret generic hyperframes-api \
+              --from-file=RENDER_API_TOKEN=/dev/stdin \
+              --dry-run=client -o yaml | oc apply -f -
+          # A private GHCR image still requires the ghcr-pull imagePullSecret.
           oc apply -f openshift/deployment.yaml
           oc set image deployment/elearning-hyperframes-renderer renderer="$IMAGE"
+          # Refresh env vars sourced from the Secret even when only the token changes.
+          oc rollout restart deployment/elearning-hyperframes-renderer
           oc rollout status deployment/elearning-hyperframes-renderer --timeout=8m
           oc get route elearning-hyperframes-renderer
