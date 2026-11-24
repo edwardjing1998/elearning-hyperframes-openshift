@@ -9,6 +9,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.RENDER_DATA_DIR || '/data/jobs';
 const COMPOSITION = path.join(ROOT, 'composition');
+const TEMPLATES = Object.freeze({
+  'code-review': 'index.html',
+  'kafka-sequence': 'kafka-sequence.html'
+});
 const PORT = Number(process.env.PORT || 8080);
 const API_TOKEN = process.env.RENDER_API_TOKEN || '';
 const jobs = new Map();
@@ -34,18 +38,29 @@ function safeAuth(req) {
 }
 function info(job) {
   const { id, status, created_at, finished_at, error } = job;
-  return { job_id:id, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
+  return { job_id:id, template: job.template, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
 }
 function renderNext() {
   if (active || !queue.length) return;
   const job = queue.shift();
   active = true;
   job.status = 'running';
+  const work = path.join(DATA, job.id, 'composition');
   const output = path.join(DATA, job.id, 'review.mp4');
-  // Exact fixed composition: no user shell commands, paths, or HTML accepted.
+  // Copy a trusted, allowlisted HTML composition into a per-job working directory.
+  // The CLI renders index.html within its current working directory.
+  try {
+    fs.mkdirSync(path.join(work, 'assets'), { recursive: true });
+    fs.copyFileSync(path.join(COMPOSITION, TEMPLATES[job.template]), path.join(work, 'index.html'));
+    fs.copyFileSync(path.join(COMPOSITION, 'assets', 'gsap.min.js'), path.join(work, 'assets', 'gsap.min.js'));
+  } catch (err) {
+    job.status = 'failed'; job.error = `Could not stage composition: ${err.message}`;
+    job.finished_at = new Date().toISOString();
+    active = false; renderNext(); return;
+  }
   const args = ['render', '--output', output, '--quality', 'draft'];
   const child = spawn(BIN, args, {
-    cwd: COMPOSITION,
+    cwd: work,
     env: { ...process.env, CI: 'true' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -78,14 +93,31 @@ http.createServer(async (req,res) => {
   if (req.method === 'GET' && route === '/healthz') return sendJson(res, 200, { status:'ok' });
   if (req.method === 'GET' && route === '/') return staticFile(res, path.join(ROOT,'public','index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && route === '/composition/index.html') return staticFile(res, path.join(COMPOSITION,'index.html'), 'text/html; charset=utf-8');
+  if (req.method === 'GET' && route === '/composition/kafka-sequence.html') return staticFile(res, path.join(COMPOSITION,'kafka-sequence.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && route === '/composition/assets/gsap.min.js') return staticFile(res, path.join(COMPOSITION,'assets','gsap.min.js'), 'text/javascript; charset=utf-8');
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
     if (req.method === 'POST' && route === '/api/render') {
       if (active && queue.length >= 2) return sendJson(res, 429, { error:'Renderer busy: max 2 queued jobs' });
+      // Optional JSON payload; never accept an arbitrary filesystem path or HTML URL.
+      let body = '';
+      try {
+        for await (const chunk of req) {
+          body += chunk.toString('utf8');
+          if (body.length > 4096) return sendJson(res, 413, { error:'Request too large' });
+        }
+      } catch (err) { return sendJson(res, 400, { error:'Invalid request body' }); }
+      let config = {};
+      try { config = body.trim() ? JSON.parse(body) : {}; }
+      catch { return sendJson(res, 400, { error:'Invalid JSON' }); }
+      if (!config || typeof config !== 'object' || Array.isArray(config))
+        return sendJson(res, 400, {error:'JSON body must be an object'});
+      const template = config.template ?? 'code-review';
+      if (!Object.hasOwn(TEMPLATES, template))
+        return sendJson(res, 400, { error:'Unknown template', allowed_templates:Object.keys(TEMPLATES) });
       const id = crypto.randomUUID();
       await fsp.mkdir(path.join(DATA,id), { recursive:true });
-      const job = { id, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
+      const job = { id, template, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
       jobs.set(id, job); queue.push(job); renderNext();
       return sendJson(res, 202, info(job));
     }

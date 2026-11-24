@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=1280, initial-scale=1">
+<title>HyperFrames - Kafka Event Processing Sequence</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071524;color:#edf7ff;font-family:Inter,system-ui,sans-serif}
+#root{position:relative;width:1280px;height:720px;overflow:hidden;background:radial-gradient(ellipse at 86% 2%,#154262 0,transparent 48%),#071524}
+.eyebrow{position:absolute;top:47px;left:64px;color:#7dddf5;letter-spacing:2px;font-size:14px;font-weight:800}
+h1{position:absolute;left:64px;top:85px;margin:0;font-size:39px;letter-spacing:-1px}
+.subtitle{position:absolute;top:145px;left:64px;font-size:17px;color:#aac6df}
+.board{position:absolute;left:64px;top:207px;width:1152px;height:380px;border:1px solid #315574;border-radius:18px;background:#0d2135;overflow:hidden}
+.participant{position:absolute;top:24px;width:240px;height:66px;border:1px solid #47718c;border-radius:12px;background:#17344b;display:flex;justify-content:center;align-items:center;flex-direction:column;gap:5px}
+.participant strong{font-size:20px}.participant small{font-size:13px;color:#a9c7d9}.participant.on{border-color:#77d9ff;background:#1b536b;box-shadow:0 0 0 3px #2389aa44}
+#p1{left:34px}#p2{left:456px}#p3{left:878px}
+.lifeline{position:absolute;top:90px;height:248px;width:0;border-left:2px dashed #46627a}
+#life1{left:154px}#life2{left:576px}#life3{left:998px}
+.arrow{position:absolute;left:154px;width:422px;height:38px;opacity:.16}
+#arrow1{top:126px}#arrow2{top:197px;left:576px}#arrow3{top:268px;left:998px;width:422px;transform:rotate(180deg);transform-origin:211px 19px}
+.arrow .stroke{height:3px;position:absolute;left:0;top:18px;width:100%;background:#69d7f9;transform-origin:left;transform:scaleX(.02)}
+.arrow .head{position:absolute;right:0;top:11px;border-left:14px solid #69d7f9;border-top:8px solid transparent;border-bottom:8px solid transparent}
+.arrow .caption{position:absolute;top:-6px;left:17px;color:#d3edff;font-weight:700;font-size:15px}
+#arrow3 .caption{transform:rotate(180deg);top:21px;left:150px}
+.detail{position:absolute;left:64px;top:603px;right:64px;height:68px;display:flex;align-items:center;gap:22px}
+.step{font-size:14px;color:#7fe0f5;letter-spacing:1px;font-weight:800;min-width:120px}
+#explain{font-size:19px;line-height:1.35;color:#e1f0fb;flex:1}
+.progress{position:absolute;left:64px;right:64px;bottom:24px;height:5px;background:#294660;border-radius:9px;overflow:hidden}
+#fill{height:100%;width:0;background:#66d8f5}
+</style>
+<script src="./assets/gsap.min.js"></script>
+</head>
+<body>
+<div id="root" data-composition-id="kafka-sequence" data-start="0" data-duration="12" data-width="1280" data-height="720">
+  <div class="eyebrow">AI ENGINEERING LAB / ARCHITECTURE ANIMATION</div>
+  <h1>Kafka Event Processing <span style="color:#76d9ff">Sequence</span></h1>
+  <div class="subtitle">Producer → Kafka Broker → Consumer, explained step by step</div>
+  <div class="board">
+    <div class="participant" id="p1"><strong>Order Service</strong><small>Kafka Producer</small></div>
+    <div class="participant" id="p2"><strong>Kafka Broker</strong><small>Topic: orders</small></div>
+    <div class="participant" id="p3"><strong>Inventory Service</strong><small>Kafka Consumer</small></div>
+    <div class="lifeline" id="life1"></div><div class="lifeline" id="life2"></div><div class="lifeline" id="life3"></div>
+    <div class="arrow" id="arrow1"><div class="caption">1. Publish OrderCreated</div><div class="stroke"></div><div class="head"></div></div>
+    <div class="arrow" id="arrow2"><div class="caption">2. Deliver the event</div><div class="stroke"></div><div class="head"></div></div>
+    <div class="arrow" id="arrow3"><div class="caption">3. Processing acknowledgment</div><div class="stroke"></div><div class="head"></div></div>
+  </div>
+  <div class="detail"><span class="step" id="step">01 / PRODUCER</span><span id="explain">The order service prepares an OrderCreated event.</span></div>
+  <div class="progress"><div id="fill"></div></div>
+  <script>
+    (function () {
+      const tl=gsap.timeline({paused:true});
+      // A seekable timeline suitable for deterministic per-frame rendering.
+      tl.set('#step',{textContent:'01 / PRODUCER'},0);
+      tl.set('#explain',{textContent:'The order service prepares an OrderCreated event.'},0);
+      tl.to('#p1',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:0.4},0.15);
+      tl.set('#step',{textContent:'02 / PUBLISH'},3);
+      tl.set('#explain',{textContent:'The producer publishes OrderCreated to the orders topic.'},3);
+      tl.to('#arrow1',{opacity:1,duration:.35},3.1);
+      tl.to('#arrow1 .stroke',{scaleX:1,duration:1.5,ease:'none'},3.2);
+      tl.to('#p2',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:.5},4.5);
+      tl.set('#step',{textContent:'03 / CONSUME'},6);
+      tl.set('#explain',{textContent:'The inventory service consumes the event and updates inventory.'},6);
+      tl.to('#arrow2',{opacity:1,duration:.35},6.1);
+      tl.to('#arrow2 .stroke',{scaleX:1,duration:1.5,ease:'none'},6.2);
+      tl.to('#p3',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:.5},7.5);
+      tl.set('#step',{textContent:'04 / COMPLETE'},9);
+      tl.set('#explain',{textContent:'Processing finishes. In real Kafka flows, commits and acknowledgment semantics depend on the consumer design.'},9);
+      tl.to('#arrow3',{opacity:1,duration:.35},9.1);
+      tl.to('#arrow3 .stroke',{scaleX:1,duration:1.5,ease:'none'},9.2);
+      tl.to('#fill',{width:'100%',duration:12,ease:'none'},0);
+      tl.to({}, {duration:.01},11.99);
+      window.__timelines=window.__timelines||{};
+      window.__timelines['kafka-sequence']=tl;
+    })();
+  </script>
+</div>
+</body>
+</html>
