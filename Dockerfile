@@ -24,6 +24,7 @@ RUN npm install --omit=dev --no-audit --no-fund \
  && mkdir -p /app/composition/assets /data/jobs /tmp/.cache \
  && cp /app/node_modules/gsap/dist/gsap.min.js /app/composition/assets/gsap.min.js
 COPY server.mjs ./
+COPY src/ ./src/
 COPY composition/ ./composition/
 COPY public/ ./public/
 # The compose file is copied after dependencies; ensure local GSAP is still present.

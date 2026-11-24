@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=1280, initial-scale=1"><title>HyperFrames Markdown Review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#091626;color:#eef6ff;font-family:system-ui,sans-serif}
+#root{position:relative;width:1280px;height:720px;padding:42px 54px;background:radial-gradient(ellipse at 90% 0%,#173c56,transparent 55%),#091626;overflow:hidden}
+.kicker{font-size:13px;letter-spacing:2px;font-weight:800;color:#6dd7ee}h1{margin:12px 0 5px;font-size:35px} .subtitle{color:#a3c1db;font-size:15px}
+.layout{display:flex;gap:25px;margin-top:26px;height:485px}.code{width:754px;border:1px solid #36536d;background:#0b1e32;border-radius:16px;overflow:hidden}
+.code-head{height:49px;padding:15px 18px;background:#143047;font-size:14px;color:#c9e4f3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.code-scroll{padding:12px;overflow:hidden;height:436px}.line{display:flex;align-items:center;min-height:32px;font:15px/1.4 ui-monospace,Menlo,Consolas,monospace;white-space:pre;border-radius:5px;border:1px solid transparent;padding:4px 7px}
+.num{color:#7295ab;min-width:40px}.source{color:#d5e8fb;white-space:pre}.right{flex:1;background:#12293e;border:1px solid #36536d;border-radius:16px;padding:23px;overflow:hidden}
+.label{font-size:12px;letter-spacing:1.5px;color:#7cddf8;font-weight:800}#findingTitle{font-size:25px;margin:17px 0 13px}#findingText{font-size:17px;line-height:1.5;color:#c3d5e5}
+.diagram{margin-top:23px;height:165px;border-top:1px solid #36536d;padding-top:14px;display:none}.diagram svg{max-width:100%;height:130px}
+.footer{display:flex;align-items:center;gap:14px;position:absolute;bottom:28px;left:54px;right:54px;color:#8daec9;font-size:13px}.track{flex:1;background:#24415a;border-radius:9px;height:5px;overflow:hidden}#progress{height:100%;width:0;background:#65d7ef}
+</style><script src="./assets/gsap.min.js"></script></head><body>
+<div id="root" data-composition-id="markdown-review" data-start="0" data-duration="16" data-width="1280" data-height="720">
+  <div class="kicker">AI ENGINEERING LAB / MARKDOWN SOURCE CODE REVIEW</div>
+  <h1 id="title"></h1><div class="subtitle">Code and findings loaded from Markdown · GSAP timeline</div>
+  <div class="layout"><div class="code"><div class="code-head" id="filename"></div><div class="code-scroll" id="lines"></div></div>
+  <div class="right"><div class="label" id="stepLabel">CODE REVIEW</div><h2 id="findingTitle"></h2><p id="findingText"></p>
+  <div class="diagram" id="diagram"><div class="label">RELATED SEQUENCE DIAGRAM</div><svg id="mini" viewBox="0 0 330 120"></svg></div></div></div>
+  <div class="footer"><span id="counter">16 SECOND TIMELINE</span><div class="track"><div id="progress"></div></div><span>MARKDOWN → VIDEO</span></div>
+  <script>
+  (function(){
+    const data={{RENDER_DATA}};
+    document.getElementById('title').textContent=data.title;
+    document.getElementById('filename').textContent=data.sourceFile+' · '+data.language.toUpperCase();
+    const code=document.getElementById('lines');
+    data.lines.forEach((line,i)=>{const div=document.createElement('div');div.className='line';div.id='line-'+(i+1);const num=document.createElement('span');num.className='num';num.textContent=String(i+1).padStart(2,'0');const txt=document.createElement('span');txt.className='source';txt.textContent=line;div.append(num,txt);code.append(div);});
+    const tl=gsap.timeline({paused:true});const stepDuration=12/data.findings.length;
+    data.findings.forEach((finding,i)=>{const t=i*stepDuration;
+      tl.to('.line',{backgroundColor:'rgba(0,0,0,0)',borderColor:'transparent',duration:.25},t);
+      for(let n=finding.startLine;n<=finding.endLine;n++)tl.to('#line-'+n,{backgroundColor:'#234d63',borderColor:'#6fd6f6',duration:.4},t+.2);
+      tl.set('#stepLabel',{textContent:'REVIEW '+String(i+1).padStart(2,'0')+' / '+data.findings.length},t);
+      tl.set('#findingTitle',{textContent:finding.title},t);
+      tl.set('#findingText',{textContent:finding.description},t);
+    });
+    if(data.diagram){
+      const el=document.getElementById('diagram');el.style.display='block';const svg=document.getElementById('mini');
+      const ns='http://www.w3.org/2000/svg';const make=(tag,attrs,txt)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(txt)e.textContent=txt;svg.append(e);return e;};
+      data.diagram.participants.forEach((p,i)=>{const x=12+(i+.5)*(305/data.diagram.participants.length);make('rect',{x:x-33,y:14,width:66,height:25,rx:5,fill:'#1a5874',stroke:'#75d4f3'});make('text',{x,y:29,'text-anchor':'middle',fill:'#fff','font-size':8},p.label.slice(0,13));make('line',{x1:x,y1:39,x2:x,y2:115,stroke:'#4b6e84','stroke-dasharray':'3 3'});});
+      const lookup=id=>data.diagram.participants.findIndex(p=>p.id===id);
+      data.diagram.messages.slice(0,5).forEach((m,i)=>{const x1=12+(lookup(m.from)+.5)*(305/data.diagram.participants.length),x2=12+(lookup(m.to)+.5)*(305/data.diagram.participants.length),y=49+i*13;make('line',{x1,y1:y,x2,y2:y,stroke:'#70d9f5','stroke-width':1.5});});
+      tl.set('#stepLabel',{textContent:'RELATED CALL FLOW'},12);
+      tl.set('#findingTitle',{textContent:'Review the call sequence'},12);
+      tl.set('#findingText',{textContent:'The Mermaid diagram shows the related method calls and returns.'},12);
+      tl.to('#diagram',{opacity:1,duration:.5},12);
+    } else {
+      tl.set('#stepLabel',{textContent:'SUMMARY'},12);
+      tl.set('#findingTitle',{textContent:'Code review complete'},12);
+      tl.set('#findingText',{textContent:'Verify the findings against the surrounding code and API contract.'},12);
+    }
+    tl.to('#progress',{width:'100%',duration:16,ease:'none'},0);tl.to({}, {duration:.01},15.99);
+    window.__timelines=window.__timelines||{};window.__timelines['markdown-review']=tl;
+  })();
+  </script>
+</div></body></html>

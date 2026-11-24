@@ -35,13 +35,13 @@ h1{position:absolute;left:64px;top:85px;margin:0;font-size:39px;letter-spacing:-
   <h1>Kafka Event Processing <span style="color:#76d9ff">Sequence</span></h1>
   <div class="subtitle">Producer → Kafka Broker → Consumer, explained step by step</div>
   <div class="board">
-    <div class="participant" id="p1"><strong>Order Service</strong><small>Kafka Producer</small></div>
-    <div class="participant" id="p2"><strong>Kafka Broker</strong><small>Topic: orders</small></div>
-    <div class="participant" id="p3"><strong>Inventory Service</strong><small>Kafka Consumer</small></div>
+    <div class="participant" id="p1"><strong>{{PARTICIPANT_1}}</strong><small>{{ROLE_1}}</small></div>
+    <div class="participant" id="p2"><strong>{{PARTICIPANT_2}}</strong><small>{{ROLE_2}}</small></div>
+    <div class="participant" id="p3"><strong>{{PARTICIPANT_3}}</strong><small>{{ROLE_3}}</small></div>
     <div class="lifeline" id="life1"></div><div class="lifeline" id="life2"></div><div class="lifeline" id="life3"></div>
-    <div class="arrow" id="arrow1"><div class="caption">1. Publish OrderCreated</div><div class="stroke"></div><div class="head"></div></div>
-    <div class="arrow" id="arrow2"><div class="caption">2. Deliver the event</div><div class="stroke"></div><div class="head"></div></div>
-    <div class="arrow" id="arrow3"><div class="caption">3. Processing acknowledgment</div><div class="stroke"></div><div class="head"></div></div>
+    <div class="arrow" id="arrow1"><div class="caption">{{MESSAGE_1}}</div><div class="stroke"></div><div class="head"></div></div>
+    <div class="arrow" id="arrow2"><div class="caption">{{MESSAGE_2}}</div><div class="stroke"></div><div class="head"></div></div>
+    <div class="arrow" id="arrow3"><div class="caption">{{MESSAGE_3}}</div><div class="stroke"></div><div class="head"></div></div>
   </div>
   <div class="detail"><span class="step" id="step">01 / PRODUCER</span><span id="explain">The order service prepares an OrderCreated event.</span></div>
   <div class="progress"><div id="fill"></div></div>

@@ -1,3 +1,5 @@
+import { compileKafkaComposition, parseSequenceDiagram } from './src/loaders/diagram-loader.mjs';
+import { parseReviewMarkdown } from './src/loaders/markdown-loader.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -9,10 +11,40 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.RENDER_DATA_DIR || '/data/jobs';
 const COMPOSITION = path.join(ROOT, 'composition');
+const TEMPLATES_DIR = path.join(COMPOSITION, 'templates');
+const REVIEW_DIR = path.join(COMPOSITION, 'documents', 'reviews');
+const DIAGRAM_DIR = path.join(COMPOSITION, 'documents', 'diagrams');
 const TEMPLATES = Object.freeze({
   'code-review': 'index.html',
-  'kafka-sequence': 'kafka-sequence.html'
+  'kafka-sequence': 'kafka-sequence.html',
+  'markdown-review': 'markdown-review.html',
+  'sequence-diagram': 'sequence-diagram.html'
 });
+// Explicit file allowlists: never use arbitrary user-provided disk paths.
+const REVIEW_DOCS = Object.freeze({ 'java-code-review': 'java-code-review.md' });
+const DIAGRAM_DOCS = Object.freeze({ 'spring-boot-sequence': 'spring-boot-sequence.md', 'kafka-sequence': 'kafka-sequence.md' });
+function safeJsonForScript(value) {
+  return JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+}
+function getCompositionHtml(template, documentId) {
+  let html=fs.readFileSync(path.join(TEMPLATES_DIR,TEMPLATES[template]),'utf8');
+  if(template==='kafka-sequence') return compileKafkaComposition(html,fs.readFileSync(path.join(DIAGRAM_DIR,'kafka-sequence.md'),'utf8'));
+  if(template==='markdown-review') {
+    const filename=REVIEW_DOCS[documentId||'java-code-review'];
+    if(!filename) throw new Error('Unsupported review document');
+    const result=parseReviewMarkdown(fs.readFileSync(path.join(REVIEW_DIR,filename),'utf8'));
+    if(result.diagramMarkdown) result.diagram=parseSequenceDiagram(result.diagramMarkdown);
+    delete result.diagramMarkdown;
+    return html.replace('{{RENDER_DATA}}',safeJsonForScript(result));
+  }
+  if(template==='sequence-diagram') {
+    const filename=DIAGRAM_DOCS[documentId||'spring-boot-sequence'];
+    if(!filename) throw new Error('Unsupported diagram document');
+    const result=parseSequenceDiagram(fs.readFileSync(path.join(DIAGRAM_DIR,filename),'utf8'));
+    return html.replace('{{RENDER_DATA}}',safeJsonForScript(result));
+  }
+  return html;
+}
 const PORT = Number(process.env.PORT || 8080);
 const API_TOKEN = process.env.RENDER_API_TOKEN || '';
 const jobs = new Map();
@@ -38,7 +70,7 @@ function safeAuth(req) {
 }
 function info(job) {
   const { id, status, created_at, finished_at, error } = job;
-  return { job_id:id, template: job.template, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
+  return { job_id:id, template: job.template, document: job.documentId || null, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
 }
 function renderNext() {
   if (active || !queue.length) return;
@@ -51,7 +83,7 @@ function renderNext() {
   // The CLI renders index.html within its current working directory.
   try {
     fs.mkdirSync(path.join(work, 'assets'), { recursive: true });
-    fs.copyFileSync(path.join(COMPOSITION, TEMPLATES[job.template]), path.join(work, 'index.html'));
+    fs.writeFileSync(path.join(work, 'index.html'), getCompositionHtml(job.template,job.documentId));
     fs.copyFileSync(path.join(COMPOSITION, 'assets', 'gsap.min.js'), path.join(work, 'assets', 'gsap.min.js'));
   } catch (err) {
     job.status = 'failed'; job.error = `Could not stage composition: ${err.message}`;
@@ -92,8 +124,24 @@ http.createServer(async (req,res) => {
   const route = new URL(req.url, 'http://localhost').pathname;
   if (req.method === 'GET' && route === '/healthz') return sendJson(res, 200, { status:'ok' });
   if (req.method === 'GET' && route === '/') return staticFile(res, path.join(ROOT,'public','index.html'), 'text/html; charset=utf-8');
-  if (req.method === 'GET' && route === '/composition/index.html') return staticFile(res, path.join(COMPOSITION,'index.html'), 'text/html; charset=utf-8');
-  if (req.method === 'GET' && route === '/composition/kafka-sequence.html') return staticFile(res, path.join(COMPOSITION,'kafka-sequence.html'), 'text/html; charset=utf-8');
+  if (req.method === 'GET' && route === '/composition/index.html') return staticFile(res, path.join(TEMPLATES_DIR,'index.html'), 'text/html; charset=utf-8');
+  if (req.method === 'GET' && route === '/composition/kafka-sequence.html') {
+    try {
+      const html = getCompositionHtml('kafka-sequence');
+      res.writeHead(200, { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store' });
+      return res.end(html);
+    } catch (err) { return sendJson(res, 500, { error:'Diagram compilation failed', detail:err.message }); }
+  }
+  if (req.method === 'GET' && route === '/composition/markdown-review.html') {
+    try { res.writeHead(200,{'content-type':'text/html; charset=utf-8'}); return res.end(getCompositionHtml('markdown-review')); }
+    catch(err) { return sendJson(res,500,{error:'Review compilation failed',detail:err.message}); }
+  }
+  if (req.method === 'GET' && route === '/composition/sequence-diagram.html') {
+    try { res.writeHead(200,{'content-type':'text/html; charset=utf-8'}); return res.end(getCompositionHtml('sequence-diagram')); }
+    catch(err) { return sendJson(res,500,{error:'Sequence compilation failed',detail:err.message}); }
+  }
+  if (req.method === 'GET' && route === '/composition/kafka-sequence.md')
+    return staticFile(res, path.join(DIAGRAM_DIR,'kafka-sequence.md'), 'text/markdown; charset=utf-8');
   if (req.method === 'GET' && route === '/composition/assets/gsap.min.js') return staticFile(res, path.join(COMPOSITION,'assets','gsap.min.js'), 'text/javascript; charset=utf-8');
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
@@ -115,9 +163,18 @@ http.createServer(async (req,res) => {
       const template = config.template ?? 'code-review';
       if (!Object.hasOwn(TEMPLATES, template))
         return sendJson(res, 400, { error:'Unknown template', allowed_templates:Object.keys(TEMPLATES) });
+      const documentId = config.document ?? null;
+      const allowedDocs = template==='markdown-review' ? REVIEW_DOCS : template==='sequence-diagram' ? DIAGRAM_DOCS : null;
+      if (allowedDocs && documentId!==null && !Object.hasOwn(allowedDocs,documentId))
+        return sendJson(res,400,{error:'Unknown Markdown document',allowed_documents:Object.keys(allowedDocs)});
+      if (!allowedDocs && documentId!==null)
+        return sendJson(res,400,{error:'document is only supported for markdown-review or sequence-diagram'});
+      // Validate source before enqueueing to avoid late failures.
+      try { getCompositionHtml(template, documentId); }
+      catch(err) { return sendJson(res,400,{error:'Invalid template source',detail:err.message}); }
       const id = crypto.randomUUID();
       await fsp.mkdir(path.join(DATA,id), { recursive:true });
-      const job = { id, template, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
+      const job = { id, template, documentId, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
       jobs.set(id, job); queue.push(job); renderNext();
       return sendJson(res, 202, info(job));
     }
