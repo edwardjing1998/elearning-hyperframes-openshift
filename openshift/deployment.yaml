@@ -6,6 +6,7 @@ metadata:
     app: elearning-hyperframes-renderer
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   strategy:
     type: Recreate
   selector:
@@ -54,6 +55,27 @@ spec:
                 secretKeyRef:
                   name: hyperframes-speech-key
                   key: SPEECH_KEY
+            - name: VIDEO_STORAGE_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-storage-config
+                  key: VIDEO_STORAGE_MODE
+            - name: AZURE_STORAGE_CONTAINER
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-storage-config
+                  key: AZURE_STORAGE_CONTAINER
+            - name: AZURE_STORAGE_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-storage-config
+                  key: AZURE_STORAGE_PREFIX
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: hyperframes-storage-secret
+                  key: AZURE_STORAGE_CONNECTION_STRING
+                  optional: true
           resources:
             requests:
               cpu: 500m

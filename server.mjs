@@ -1,3 +1,4 @@
+import { uploadRenderedVideo, validateStorageConfig } from './src/storage/azure-blob-storage.mjs';
 import { synthesizeWav } from './src/speech/azure-speech.mjs';
 import { makeNarration, validateNarrationRequest } from './src/services/narration-builder.mjs';
 import { wavDuration, addNarrationAudio } from './src/services/audio-composition.mjs';
@@ -50,6 +51,8 @@ function getCompositionHtml(template, documentId) {
 }
 const PORT = Number(process.env.PORT || 8080);
 const API_TOKEN = process.env.RENDER_API_TOKEN || '';
+// Validate optional Azure Blob settings before accepting render jobs.
+validateStorageConfig();
 const jobs = new Map();
 const queue = [];
 let active = false;
@@ -73,7 +76,7 @@ function safeAuth(req) {
 }
 function info(job) {
   const { id, status, created_at, finished_at, error } = job;
-  return { job_id:id, template: job.template, document: job.documentId || null, narration_enabled: job.narration.enabled, status, created_at, finished_at, error, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
+  return { job_id:id, template: job.template, document: job.documentId || null, narration_enabled: job.narration.enabled, status, created_at, finished_at, error, storage: job.storage || null, download_url: status === 'completed' ? `/api/jobs/${id}/download` : null };
 }
 // Preserve the original single-worker queue, REST paths, and HyperFrames CLI invocation.
 async function renderNext() {
@@ -112,6 +115,11 @@ async function renderNext() {
       child.once('close',(exitCode)=>{log.end();resolve(exitCode);});
     });
     if (code!==0 || !fs.existsSync(output)) throw new Error(`HyperFrames exited with code ${code}; see render.log`);
+    // Upload only after HyperFrames produced a valid local MP4.
+    writeLog('[storage] Uploading rendered MP4 to Azure Blob Storage if enabled');
+    job.storage = await uploadRenderedVideo(output, { template: job.template, jobId: job.id });
+    if (job.storage) writeLog(`[storage] Uploaded: ${job.storage.container}/${job.storage.blob_name}`);
+    else writeLog('[storage] Azure upload disabled; MP4 remains local');
     job.status='completed';
   } catch(err) {
     job.status='failed'; job.error=err.message;
@@ -191,7 +199,7 @@ http.createServer(async (req,res) => {
         return sendJson(res,503,{error:'Azure Speech is not configured (SPEECH_MODE, SPEECH_KEY, SPEECH_ENDPOINT)'});
       const id = crypto.randomUUID();
       await fsp.mkdir(path.join(DATA,id), { recursive:true });
-      const job = { id, template, documentId, narration, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null };
+      const job = { id, template, documentId, narration, status:'queued', created_at:new Date().toISOString(), finished_at:null, error:null, storage:null };
       jobs.set(id, job); queue.push(job); renderNext();
       return sendJson(res, 202, info(job));
     }

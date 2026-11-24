@@ -64,6 +64,10 @@ jobs:
           SPEECH_ENDPOINT: ${{ vars.SPEECH_ENDPOINT }}
           SPEECH_VOICE: ${{ vars.SPEECH_VOICE }}
           SPEECH_KEY: ${{ secrets.SPEECH_KEY }}
+          VIDEO_STORAGE_MODE: ${{ vars.VIDEO_STORAGE_MODE }}
+          AZURE_STORAGE_CONTAINER: ${{ vars.AZURE_STORAGE_CONTAINER }}
+          AZURE_STORAGE_PREFIX: ${{ vars.AZURE_STORAGE_PREFIX }}
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
           IMAGE: ${{ needs.build.outputs.image }}
         run: |
           set -euo pipefail
@@ -127,15 +131,44 @@ jobs:
                 --dry-run=client -o yaml | oc apply -f -
           fi
 
+          # Azure Blob Storage is opt-in; keep existing rendering working when disabled.
+          VIDEO_STORAGE_MODE="${VIDEO_STORAGE_MODE:-disabled}"
+          AZURE_STORAGE_CONTAINER="${AZURE_STORAGE_CONTAINER:-elearning-videos}"
+          AZURE_STORAGE_PREFIX="${AZURE_STORAGE_PREFIX:-hyperframes}"
+
+          case "$VIDEO_STORAGE_MODE" in
+            azure)
+              : "${AZURE_STORAGE_CONNECTION_STRING:?Missing development secret AZURE_STORAGE_CONNECTION_STRING}"
+              ;;
+            disabled) ;;
+            *)
+              echo "Invalid VIDEO_STORAGE_MODE; use disabled or azure" >&2
+              exit 1
+              ;;
+          esac
+
+          # Create or update non-secret Azure Storage configuration.
+          oc create configmap hyperframes-storage-config \
+            --from-literal=VIDEO_STORAGE_MODE="$VIDEO_STORAGE_MODE" \
+            --from-literal=AZURE_STORAGE_CONTAINER="$AZURE_STORAGE_CONTAINER" \
+            --from-literal=AZURE_STORAGE_PREFIX="$AZURE_STORAGE_PREFIX" \
+            --dry-run=client -o yaml | oc apply -f -
+
+          # Create or update the Azure Storage connection string.
+          if [ "$VIDEO_STORAGE_MODE" = "azure" ]; then
+            printf '%s' "$AZURE_STORAGE_CONNECTION_STRING" | \
+              oc create secret generic hyperframes-storage-secret \
+                --from-file=AZURE_STORAGE_CONNECTION_STRING=/dev/stdin \
+                --dry-run=client -o yaml | oc apply -f -
+          fi
+
           # Private GHCR images require ghcr-pull.
           oc apply -f openshift/deployment.yaml
 
           oc set image deployment/elearning-hyperframes-renderer \
             renderer="$IMAGE"
 
-          # Reload configuration and secrets.
-          oc rollout restart deployment/elearning-hyperframes-renderer
-
+          # oc set image triggers a rollout for the new commit SHA.
           oc rollout status deployment/elearning-hyperframes-renderer \
             --timeout=8m
 
