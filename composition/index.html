@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1280, initial-scale=1" />
+  <title>HyperFrames - Java Source Code Review</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0a1221; color: #e9f1ff; font-family: Inter, system-ui, -apple-system, sans-serif; }
+    #root { width: 1280px; height: 720px; overflow: hidden; position: relative; background: radial-gradient(ellipse at 93% 3%, #18365f 0, transparent 44%), #0a1221; }
+    .top { position: absolute; left: 64px; top: 47px; right: 64px; display: flex; justify-content: space-between; align-items: center; }
+    .eyebrow { color: #7bd5f4; letter-spacing: 2px; font-weight: 700; font-size: 14px; }
+    .pill { background: #142c40; color: #91e5c1; border: 1px solid #326b6a; border-radius: 50px; padding: 9px 16px; font-size: 14px; }
+    h1 { position: absolute; top: 93px; left: 64px; margin: 0; font-size: 38px; line-height: 1.12; letter-spacing: -.8px; }
+    .sub { position: absolute; left: 64px; top: 150px; color: #a1b3cc; font-size: 16px; }
+    .codepanel { position: absolute; left: 64px; top: 204px; width: 754px; height: 416px; border-radius: 16px; border: 1px solid #34506a; overflow: hidden; background: #0b1829; box-shadow: 0 24px 48px #0005; }
+    .codeheader { height: 56px; border-bottom: 1px solid #273d54; background: #102239; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; color: #bdd0eb; font-size: 15px; }
+    .dot { width: 9px; height: 9px; background: #6de6ae; border-radius: 50%; display: inline-block; margin-right: 10px; }
+    .codebody { padding: 28px 18px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 19px; line-height: 44px; }
+    .line { border-radius: 7px; display: flex; padding: 0 8px; border: 1px solid transparent; white-space: pre; }
+    .num { color: #6f829b; display: inline-block; width: 50px; flex-shrink: 0; user-select: none; }
+    .syntax-key { color: #a78bfa; }
+    .syntax-type { color: #76d8f5; }
+    .syntax-call { color: #f6ca85; }
+    .syntax-comment { color: #8ea3bd; }
+    .sidebar { position: absolute; left: 848px; top: 204px; width: 368px; height: 416px; display: flex; flex-direction: column; gap: 16px; }
+    .reviewcard { border: 1px solid #34506a; border-radius: 16px; padding: 24px; background: #12263b; min-height: 213px; }
+    .label { color: #7bd5f4; text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; font-weight: 800; }
+    #reviewTitle { margin: 14px 0 10px; font-size: 25px; line-height: 1.22; }
+    #reviewBody { margin: 0; line-height: 1.6; color: #b8c9db; font-size: 16px; }
+    .rule { border-top: 1px solid #36516b; padding-top: 18px; color: #a9bdd2; font-size: 14px; }
+    .foot { position: absolute; left: 64px; bottom: 40px; right: 64px; display: flex; align-items: center; gap: 18px; color: #7d94af; font-size: 13px; }
+    .progress { flex: 1; height: 5px; background: #253951; border-radius: 99px; overflow: hidden; }
+    #progressFill { width: 0%; height: 100%; background: #65d2f5; }
+    #issueMarker { color: #fbbf78; font-weight: 700; }
+  </style>
+  <script src="./assets/gsap.min.js"></script>
+</head>
+<body>
+  <!-- This is a HyperFrames composition, NOT a lessonVideoAPI webpage. -->
+  <div id="root" data-composition-id="java-code-review" data-start="0" data-duration="12" data-width="1280" data-height="720">
+    <div class="top"><div class="eyebrow">AI ENGINEERING LAB / SOURCE CODE REVIEW</div><div class="pill">JAVA · SPRING BOOT</div></div>
+    <h1>Reviewing <span style="color:#79d8fc">UserService.java</span></h1>
+    <div class="sub">A timeline-driven walkthrough of a potential null-handling problem</div>
+    <div class="codepanel">
+      <div class="codeheader"><span><i class="dot"></i>src/main/java/app/service/UserService.java</span><span>READ ONLY</span></div>
+      <div class="codebody">
+        <div class="line" id="l40"><span class="num">40</span><span><span class="syntax-key">public</span> <span class="syntax-type">User</span> findUser(Long id) {</span></div>
+        <div class="line" id="l41"><span class="num">41</span><span>    Optional&lt;User&gt; user =</span></div>
+        <div class="line" id="l42"><span class="num">42</span><span>        repository.<span class="syntax-call">findById</span>(id);</span></div>
+        <div class="line" id="l43"><span class="num">43</span><span>    <span class="syntax-key">return</span> user.<span class="syntax-call">orElse</span>(null);</span></div>
+        <div class="line" id="l44"><span class="num">44</span><span>}</span></div>
+        <div class="line" id="l45"><span class="num">45</span><span class="syntax-comment">// Does the caller handle null?</span></span></div>
+      </div>
+    </div>
+    <div class="sidebar">
+      <div class="reviewcard">
+        <div class="label">Code Review / <span id="stepLabel">01 · Context</span></div>
+        <h2 id="reviewTitle">Inspect the method</h2>
+        <p id="reviewBody">We start with a small Spring Boot service method and verify the contract expected by its callers.</p>
+      </div>
+      <div class="reviewcard" style="min-height:184px">
+        <div class="label">Review finding</div>
+        <p id="issueMarker" style="font-size:19px;margin:16px 0 9px">Potential null return</p>
+        <p style="font-size:15px;line-height:1.55;color:#adbed0;margin:0">This is a review candidate, not a confirmed defect. Inspect the calling code and API contract before deciding on a fix.</p>
+      </div>
+    </div>
+    <div class="foot"><span>CODE REVIEW DEMO</span><div class="progress"><div id="progressFill"></div></div><span>12 SECOND TIMELINE</span></div>
+    <script>
+      // HyperFrames controls this paused timeline during preview and per-frame rendering.
+      // All mutations are seekable GSAP tweens, not setTimeout or requestAnimationFrame.
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const backgrounds = ['#15273b', '#15364b', '#594226', '#17443e'];
+        const borders = ['#34506a', '#58c8e9', '#ffbf69', '#69d9b2'];
+        const lines = ['#l40', '#l42', '#l43', '#l45'];
+        const titles = [
+          ['01 · Context', 'Inspect the method', 'Start with the signature and understand how callers use this return value.'],
+          ['02 · Data access', 'Repository lookup', 'findById returns an Optional; an absent user is a valid possible result.'],
+          ['03 · Risk', 'Potential null result', 'orElse(null) may be acceptable, but callers must explicitly handle null.'],
+          ['04 · Recommendation', 'Verify the caller', 'Consider Optional, a domain exception, or explicit not-found handling based on the API contract.']
+        ];
+        // A finite 12-second master timeline.
+        tl.set('#reviewTitle', { opacity: 1 }, 0);
+        lines.forEach((selector, i) => {
+          const t = i * 3;
+          // The focus moves to the next source line; earlier lines return to normal.
+          tl.to('.line', { backgroundColor: 'rgba(0,0,0,0)', borderColor: 'rgba(0,0,0,0)', duration: 0.30 }, t);
+          tl.to(selector, { backgroundColor: backgrounds[i], borderColor: borders[i], duration: 0.46 }, t + 0.12);
+          tl.set('#stepLabel', { textContent: titles[i][0] }, t);
+          tl.set('#reviewTitle', { textContent: titles[i][1] }, t);
+          tl.set('#reviewBody', { textContent: titles[i][2] }, t);
+        });
+        tl.to('#progressFill', { width: '100%', duration: 12, ease: 'none' }, 0);
+        // Holds the last state until the end of the 12-second video.
+        tl.to({}, { duration: 0.01 }, 11.99);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['java-code-review'] = tl;
+      })();
+    </script>
+  </div>
+</body>
+</html>

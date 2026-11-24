@@ -1,0 +1,58 @@
+name: Build and deploy HyperFrames renderer
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set image name
+        id: image
+        shell: bash
+        run: |
+          echo "value=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push container
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.value }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenShift client
+        run: |
+          curl -fsSL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz -o oc.tar.gz
+          tar -xzf oc.tar.gz oc
+          sudo mv oc /usr/local/bin/oc
+      - name: Deploy image
+        env:
+          OPENSHIFT_SERVER: ${{ vars.OPENSHIFT_SERVER }}
+          OPENSHIFT_NAMESPACE: ${{ vars.OPENSHIFT_NAMESPACE }}
+          OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+          IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          set -euo pipefail
+          oc login --server="$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN"
+          oc project "${OPENSHIFT_NAMESPACE:-edward-jing-dev}"
+          # The hyperframes-api Secret and ghcr-pull image pull secret must be created once.
+          oc apply -f openshift/deployment.yaml
+          oc set image deployment/elearning-hyperframes-renderer renderer="$IMAGE"
+          oc rollout status deployment/elearning-hyperframes-renderer --timeout=8m
+          oc get route elearning-hyperframes-renderer

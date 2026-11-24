@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elearning-hyperframes-renderer
+  labels:
+    app: elearning-hyperframes-renderer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: elearning-hyperframes-renderer
+  template:
+    metadata:
+      labels:
+        app: elearning-hyperframes-renderer
+    spec:
+      containers:
+        - name: renderer
+          # GitHub Actions updates this to your GHCR image after deployment.
+          image: ghcr.io/REPLACE_OWNER/elearning-hyperframes-openshift:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: RENDER_DATA_DIR
+              value: /data/jobs
+            - name: RENDER_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hyperframes-api
+                  key: RENDER_API_TOKEN
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 5Gi
+          volumeMounts:
+            - name: render-data
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: render-data
+          emptyDir:
+            sizeLimit: 4Gi
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elearning-hyperframes-renderer
+spec:
+  selector:
+    app: elearning-hyperframes-renderer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: elearning-hyperframes-renderer
+spec:
+  to:
+    kind: Service
+    name: elearning-hyperframes-renderer
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

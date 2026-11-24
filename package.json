@@ -1,0 +1,20 @@
+{
+  "name": "elearning-hyperframes-openshift",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone HyperFrames source-code-review render service for OpenShift",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "render:demo": "hyperframes render --output /tmp/code-review-demo.mp4 --quality draft",
+    "lint:demo": "cd composition && ../node_modules/.bin/hyperframes lint",
+    "check:demo": "cd composition && ../node_modules/.bin/hyperframes check"
+  },
+  "dependencies": {
+    "gsap": "3.14.2",
+    "hyperframes": "0.9.87"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

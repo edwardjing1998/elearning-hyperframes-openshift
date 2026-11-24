@@ -1,0 +1,6 @@
+.git
+node_modules
+renders
+*.mp4
+*.zip
+.DS_Store
