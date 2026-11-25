@@ -6,9 +6,16 @@
 <div class="columns"><section class="panel"><h2>Capture</h2><div class="fields">
 <label>Course ID <input id="course" value="azure-storage" pattern="[a-z0-9-]+" required></label>
 <label>Render API token <input id="token" type="password" placeholder="Bearer token (not stored)" autocomplete="off" spellcheck="false"></label></div>
-<div class="actions"><button id="share">1. Share tab / window</button><button id="snapshot" disabled>Take PNG snapshot</button><button id="start" disabled>Start recording</button><button id="stop" disabled>Stop recording</button><button id="unshare" disabled>Stop sharing</button></div>
+<div class="actions"><button id="share">1. Share tab / window</button><button id="snapshot" disabled>Take PNG snapshot</button><button id="start" disabled>Start recording</button><button id="mark" disabled>Mark step</button><button id="stop" disabled>Stop recording</button><button id="unshare" disabled>Stop sharing</button></div>
 <div class="preview"><video id="live" autoplay muted playsinline></video><div id="placeholder">Select Share tab / window to see a live preview</div></div>
 <p class="hint">You must manually approve screen sharing. This app does not control Azure Portal or capture passwords automatically. Avoid selecting this Studio tab itself.</p>
 </section><section class="panel"><h2>Review & upload</h2><div id="assets" class="assets" aria-live="polite"><p>No captures yet.</p></div><div class="actions"><button id="refresh">List saved captures</button></div><div id="saved" class="saved"></div><pre id="status" role="status">Ready.</pre></section></div>
+<section class="panel narration-panel"><h2>Action-Based Azure Speech Narration</h2>
+<p>Record, press <strong>Mark step</strong> when an action begins, upload the recording, then edit the timestamped narration steps. For an existing saved recording use <strong>Narrate</strong> and set the action timestamps manually.</p>
+<div id="recording-source" class="hint">No recording selected.</div><label>Recording duration (seconds; verify for imported WebM recordings) <input id="recording-duration" type="number" min="1" step="0.01" placeholder="Duration" disabled></label>
+<div id="steps" class="steps"></div>
+<div class="actions"><button id="add-step" disabled>Add narration step</button><button id="render-narration" disabled>Render narrated MP4</button></div>
+<pre id="render-status" role="status">No narration job.</pre>
+</section>
 <footer>Images and videos are private Azure Blob assets. Review for account IDs, secrets, and sensitive information before uploading. Recordings are WebM; files are not automatically added to video lessons.</footer>
 </main><script type="module" src="/capture-studio/capture.js"></script></body></html>

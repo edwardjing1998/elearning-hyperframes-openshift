@@ -1,4 +1,5 @@
 import { handleCaptureApi } from './src/capture/capture-routes.mjs';
+import { handleRecordingApi } from './src/recordings/recording-routes.mjs';
 import { uploadRenderedVideo, validateStorageConfig } from './src/storage/azure-blob-storage.mjs';
 import { synthesizeWav } from './src/speech/azure-speech.mjs';
 import { makeNarration, validateNarrationRequest } from './src/services/narration-builder.mjs';
@@ -179,6 +180,7 @@ http.createServer(async (req,res) => {
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
     if (route === '/api/captures' || route === '/api/captures/file') return handleCaptureApi(req,res,new URL(req.url, 'http://localhost'));
+    if (route === '/api/recordings/render' || route.startsWith('/api/recording-jobs/')) return handleRecordingApi(req,res,new URL(req.url, 'http://localhost'));
     if (req.method === 'GET' && route === '/api/templates') {
       return sendJson(res,200,{templates:Object.entries(TEMPLATES).map(([name,config])=>({
         name, type:config.type, default_document:config.defaultDocument??null,
