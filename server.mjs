@@ -1,7 +1,8 @@
 import { uploadRenderedVideo, validateStorageConfig } from './src/storage/azure-blob-storage.mjs';
 import { synthesizeWav } from './src/speech/azure-speech.mjs';
 import { makeNarration, validateNarrationRequest } from './src/services/narration-builder.mjs';
-import { wavDuration, addNarrationAudio } from './src/services/audio-composition.mjs';
+import { wavDuration, addNarrationAudio, addSceneAudioClips } from './src/services/audio-composition.mjs';
+import { buildNarrationScenes, makeSceneTiming, injectSceneTiming } from './src/services/scene-narration.mjs';
 import { compileKafkaComposition, parseSequenceDiagram } from './src/loaders/diagram-loader.mjs';
 import { parseReviewMarkdown } from './src/loaders/markdown-loader.mjs';
 import http from 'node:http';
@@ -93,7 +94,20 @@ async function renderNext() {
     await fsp.mkdir(path.join(work,'assets'), {recursive:true});
     let html = getCompositionHtml(job.template, job.documentId);
     await fsp.copyFile(path.join(COMPOSITION,'assets','gsap.min.js'),path.join(work,'assets','gsap.min.js'));
-    if (job.narration.enabled) {
+    if (job.narration.enabled && !job.narration.text) {
+      const scenes=buildNarrationScenes({template:job.template,documentId:job.documentId,reviewDir:REVIEW_DIR,diagramDir:DIAGRAM_DIR});
+      const clips=[];
+      for (let i=0;i<scenes.length;i++) {
+        const file=path.join(work,'assets',`narration-${String(i+1).padStart(3,'0')}.wav`);
+        writeLog(`[speech] Scene ${i+1}/${scenes.length}: ${scenes[i].text.length} characters`);
+        await synthesizeWav(scenes[i].text,file);
+        clips.push({file:`./assets/${path.basename(file)}`,duration:await wavDuration(file)});
+      }
+      const timing=makeSceneTiming(clips.map(c=>c.duration));
+      html=injectSceneTiming(html,timing);
+      html=addSceneAudioClips(html,clips,timing);
+      writeLog(`[speech] ${clips.length} synchronized scenes, total ${timing.duration.toFixed(2)}s`);
+    } else if (job.narration.enabled) {
       const text = job.narration.text || makeNarration({template:job.template,documentId:job.documentId,reviewDir:REVIEW_DIR,diagramDir:DIAGRAM_DIR});
       writeLog(`[speech] Synthesizing ${text.length} characters using configured SPEECH_ENDPOINT and SPEECH_VOICE`);
       const file=path.join(work,'assets','narration.wav');
@@ -102,6 +116,8 @@ async function renderNext() {
       html=addNarrationAudio(html,duration);
       writeLog(`[speech] WAV ready; duration=${duration.toFixed(2)}s`);
     }
+    // Silent or explicitly overridden narration uses the original evenly spaced timeline.
+    // For explicit single-track speech, the template's fallback timeline stretches to the WAV duration.
     await fsp.writeFile(path.join(work,'index.html'),html);
     writeLog('[render] Starting HyperFrames CLI');
     const code = await new Promise((resolve,reject) => {

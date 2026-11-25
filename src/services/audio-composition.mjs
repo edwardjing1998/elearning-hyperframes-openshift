@@ -26,3 +26,19 @@ export function addNarrationAudio(html, audioDuration, { tailPaddingSeconds = 2 
   return html.replace(end,`${tag}
 </div></body>`);
 }
+
+/** Place each WAV at its own measured scene start, without re-encoding or trimming audio. */
+export function addSceneAudioClips(html, clips, timing) {
+  if (!Array.isArray(clips) || clips.length !== timing?.scenes?.length) throw new Error('Scene/audio count mismatch');
+  const duration = Math.max(compositionDuration(html), timing.duration);
+  html=html.replace(/(data-composition-id="[^"]+"[^>]*data-duration=")[0-9.]+(")/, (_,a,b)=>`${a}${duration}${b}`);
+  const audio=clips.map((clip,i)=>{
+    if (!/^\.\/assets\/narration-\d+\.wav$/.test(clip.file)) throw new Error('Unsafe narration asset');
+    const scene=timing.scenes[i];
+    if (!Number.isFinite(scene.start) || !Number.isFinite(scene.duration) || scene.duration<=0) throw new Error('Invalid scene time');
+    return `<audio class="clip" data-volume="1" src="${clip.file}" data-start="${scene.start.toFixed(3)}" data-duration="${scene.duration.toFixed(3)}" data-track-index="10"></audio>`;
+  }).join('\n');
+  const end=/<\/div>\s*<\/body>/i;
+  if (!end.test(html)) throw new Error('Composition root closing tag missing');
+  return html.replace(end,`${audio}\n</div></body>`);
+}

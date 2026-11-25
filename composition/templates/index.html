@@ -70,6 +70,7 @@
       // HyperFrames controls this paused timeline during preview and per-frame rendering.
       // All mutations are seekable GSAP tweens, not setTimeout or requestAnimationFrame.
       (function () {
+        const sceneTiming=window.__sceneTiming || null;
         const videoDuration=Number(document.getElementById('root').dataset.duration);
         const tl = gsap.timeline({ paused: true });
         const backgrounds = ['#15273b', '#15364b', '#594226', '#17443e'];
@@ -84,7 +85,7 @@
         // A finite 12-second master timeline.
         tl.set('#reviewTitle', { opacity: 1 }, 0);
         lines.forEach((selector, i) => {
-          const t = i * (videoDuration / lines.length);
+          const t = sceneTiming ? sceneTiming.scenes[i].start : i * (videoDuration / lines.length);
           // The focus moves to the next source line; earlier lines return to normal.
           tl.to('.line', { backgroundColor: 'rgba(0,0,0,0)', borderColor: 'rgba(0,0,0,0)', duration: 0.30 }, t);
           tl.to(selector, { backgroundColor: backgrounds[i], borderColor: borders[i], duration: 0.46 }, t + 0.12);

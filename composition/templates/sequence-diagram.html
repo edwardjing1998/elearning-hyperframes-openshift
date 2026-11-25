@@ -9,6 +9,7 @@
 <div class="board"><svg id="diagram" viewBox="0 0 1170 400"></svg></div><div id="detail"></div><div class="progress"><div id="fill"></div></div>
 <script>
 (function(){
+  const sceneTiming=window.__sceneTiming || null;
   const videoDuration=Number(document.getElementById('root').dataset.duration);
   const data={{RENDER_DATA}},svg=document.getElementById('diagram'),ns='http://www.w3.org/2000/svg';
   const put=(tag,attrs,txt)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(txt!==undefined)e.textContent=txt;svg.append(e);return e;};
@@ -23,7 +24,7 @@
     const triangle=put('path',{d:`M${x2+(x2>=x1?-8:8)} ${y-5} L${x2} ${y} L${x2+(x2>=x1?-8:8)} ${y+5}`,stroke:'#78d8fa','stroke-width':2,fill:'none',opacity:.08});
     const mid=(x1+x2)/2;
     const label=put('text',{x:mid,y:y-9,'text-anchor':'middle','font-size':12,fill:'#d8efff',opacity:.05},m.label.slice(0,80));
-    const t=i*duration;
+    const t=sceneTiming ? sceneTiming.scenes[i].start : i*duration;
     tl.to([line,triangle,label],{opacity:1,duration:.35},t+.15);
     tl.set('#detail',{textContent:String(i+1).padStart(2,'0')+' / '+data.messages.length+' · '+m.label},t);
   });
