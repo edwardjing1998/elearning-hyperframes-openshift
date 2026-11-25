@@ -47,27 +47,29 @@ h1{position:absolute;left:64px;top:85px;margin:0;font-size:39px;letter-spacing:-
   <div class="progress"><div id="fill"></div></div>
   <script>
     (function () {
+      const videoDuration=Number(document.getElementById('root').dataset.duration);
+      const k=videoDuration/12;
       const tl=gsap.timeline({paused:true});
       // A seekable timeline suitable for deterministic per-frame rendering.
       tl.set('#step',{textContent:'01 / PRODUCER'},0);
       tl.set('#explain',{textContent:'The order service prepares an OrderCreated event.'},0);
-      tl.to('#p1',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:0.4},0.15);
-      tl.set('#step',{textContent:'02 / PUBLISH'},3);
-      tl.set('#explain',{textContent:'The producer publishes OrderCreated to the orders topic.'},3);
-      tl.to('#arrow1',{opacity:1,duration:.35},3.1);
-      tl.to('#arrow1 .stroke',{scaleX:1,duration:1.5,ease:'none'},3.2);
-      tl.to('#p2',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:.5},4.5);
-      tl.set('#step',{textContent:'03 / CONSUME'},6);
-      tl.set('#explain',{textContent:'The inventory service consumes the event and updates inventory.'},6);
-      tl.to('#arrow2',{opacity:1,duration:.35},6.1);
-      tl.to('#arrow2 .stroke',{scaleX:1,duration:1.5,ease:'none'},6.2);
-      tl.to('#p3',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:.5},7.5);
-      tl.set('#step',{textContent:'04 / COMPLETE'},9);
-      tl.set('#explain',{textContent:'Processing finishes. In real Kafka flows, commits and acknowledgment semantics depend on the consumer design.'},9);
-      tl.to('#arrow3',{opacity:1,duration:.35},9.1);
-      tl.to('#arrow3 .stroke',{scaleX:1,duration:1.5,ease:'none'},9.2);
-      tl.to('#fill',{width:'100%',duration:12,ease:'none'},0);
-      tl.to({}, {duration:.01},11.99);
+      tl.to('#p1',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:0.4*k},0.15*k);
+      tl.set('#step',{textContent:'02 / PUBLISH'},3*k);
+      tl.set('#explain',{textContent:'The producer publishes OrderCreated to the orders topic.'},3*k);
+      tl.to('#arrow1',{opacity:1,duration:.35*k},3.1*k);
+      tl.to('#arrow1 .stroke',{scaleX:1,duration:1.5*k,ease:'none'},3.2*k);
+      tl.to('#p2',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:.5*k},4.5*k);
+      tl.set('#step',{textContent:'03 / CONSUME'},6*k);
+      tl.set('#explain',{textContent:'The inventory service consumes the event and updates inventory.'},6*k);
+      tl.to('#arrow2',{opacity:1,duration:.35*k},6.1*k);
+      tl.to('#arrow2 .stroke',{scaleX:1,duration:1.5*k,ease:'none'},6.2*k);
+      tl.to('#p3',{borderColor:'#77d9ff',backgroundColor:'#1b536b',duration:.5*k},7.5*k);
+      tl.set('#step',{textContent:'04 / COMPLETE'},9*k);
+      tl.set('#explain',{textContent:'Processing finishes. In real Kafka flows, commits and acknowledgment semantics depend on the consumer design.'},9*k);
+      tl.to('#arrow3',{opacity:1,duration:.35*k},9.1*k);
+      tl.to('#arrow3 .stroke',{scaleX:1,duration:1.5*k,ease:'none'},9.2*k);
+      tl.to('#fill',{width:'100%',duration:videoDuration,ease:'none'},0);
+      tl.to({}, {duration:.01},videoDuration-.01);
       window.__timelines=window.__timelines||{};
       window.__timelines['kafka-sequence']=tl;
     })();

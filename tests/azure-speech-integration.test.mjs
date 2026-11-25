@@ -21,6 +21,8 @@ test('all four template compositions can accept WAV without losing root',async()
  const result=addNarrationAudio(html,2);
  assert.match(result,/assets\/narration.wav/);
  assert.equal((result.match(/data-composition-id=/g)||[]).length,1);
- assert.throws(()=>addNarrationAudio(html,duration));
+ const longer=addNarrationAudio(html,duration+4);
+ assert.equal(compositionDuration(longer),duration+6);
+ assert.match(longer,/data-duration=\"[0-9.]+\" data-track-index=\"10\"/);
  }
 });

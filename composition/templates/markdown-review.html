@@ -18,7 +18,7 @@
   <div class="layout"><div class="code"><div class="code-head" id="filename"></div><div class="code-scroll" id="lines"></div></div>
   <div class="right"><div class="label" id="stepLabel">CODE REVIEW</div><h2 id="findingTitle"></h2><p id="findingText"></p>
   <div class="diagram" id="diagram"><div class="label">RELATED SEQUENCE DIAGRAM</div><svg id="mini" viewBox="0 0 330 120"></svg></div></div></div>
-  <div class="footer"><span id="counter">16 SECOND TIMELINE</span><div class="track"><div id="progress"></div></div><span>MARKDOWN → VIDEO</span></div>
+  <div class="footer"><span id="counter">DYNAMIC TIMELINE</span><div class="track"><div id="progress"></div></div><span>MARKDOWN → VIDEO</span></div>
   <script>
   (function(){
     const data={{RENDER_DATA}};
@@ -26,7 +26,10 @@
     document.getElementById('filename').textContent=data.sourceFile+' · '+data.language.toUpperCase();
     const code=document.getElementById('lines');
     data.lines.forEach((line,i)=>{const div=document.createElement('div');div.className='line';div.id='line-'+(i+1);const num=document.createElement('span');num.className='num';num.textContent=String(i+1).padStart(2,'0');const txt=document.createElement('span');txt.className='source';txt.textContent=line;div.append(num,txt);code.append(div);});
-    const tl=gsap.timeline({paused:true});const stepDuration=12/data.findings.length;
+    const videoDuration=Number(document.getElementById('root').dataset.duration);
+    const reviewDuration=videoDuration*0.75;
+    const tl=gsap.timeline({paused:true});const stepDuration=reviewDuration/Math.max(1,data.findings.length);
+    document.getElementById('counter').textContent=videoDuration.toFixed(1)+' SECOND TIMELINE';
     data.findings.forEach((finding,i)=>{const t=i*stepDuration;
       tl.to('.line',{backgroundColor:'rgba(0,0,0,0)',borderColor:'transparent',duration:.25},t);
       for(let n=finding.startLine;n<=finding.endLine;n++)tl.to('#line-'+n,{backgroundColor:'#234d63',borderColor:'#6fd6f6',duration:.4},t+.2);
@@ -40,16 +43,16 @@
       data.diagram.participants.forEach((p,i)=>{const x=12+(i+.5)*(305/data.diagram.participants.length);make('rect',{x:x-33,y:14,width:66,height:25,rx:5,fill:'#1a5874',stroke:'#75d4f3'});make('text',{x,y:29,'text-anchor':'middle',fill:'#fff','font-size':8},p.label.slice(0,13));make('line',{x1:x,y1:39,x2:x,y2:115,stroke:'#4b6e84','stroke-dasharray':'3 3'});});
       const lookup=id=>data.diagram.participants.findIndex(p=>p.id===id);
       data.diagram.messages.slice(0,5).forEach((m,i)=>{const x1=12+(lookup(m.from)+.5)*(305/data.diagram.participants.length),x2=12+(lookup(m.to)+.5)*(305/data.diagram.participants.length),y=49+i*13;make('line',{x1,y1:y,x2,y2:y,stroke:'#70d9f5','stroke-width':1.5});});
-      tl.set('#stepLabel',{textContent:'RELATED CALL FLOW'},12);
-      tl.set('#findingTitle',{textContent:'Review the call sequence'},12);
-      tl.set('#findingText',{textContent:'The Mermaid diagram shows the related method calls and returns.'},12);
-      tl.to('#diagram',{opacity:1,duration:.5},12);
+      tl.set('#stepLabel',{textContent:'RELATED CALL FLOW'},reviewDuration);
+      tl.set('#findingTitle',{textContent:'Review the call sequence'},reviewDuration);
+      tl.set('#findingText',{textContent:'The Mermaid diagram shows the related method calls and returns.'},reviewDuration);
+      tl.to('#diagram',{opacity:1,duration:.5},reviewDuration);
     } else {
-      tl.set('#stepLabel',{textContent:'SUMMARY'},12);
-      tl.set('#findingTitle',{textContent:'Code review complete'},12);
-      tl.set('#findingText',{textContent:'Verify the findings against the surrounding code and API contract.'},12);
+      tl.set('#stepLabel',{textContent:'SUMMARY'},reviewDuration);
+      tl.set('#findingTitle',{textContent:'Code review complete'},reviewDuration);
+      tl.set('#findingText',{textContent:'Verify the findings against the surrounding code and API contract.'},reviewDuration);
     }
-    tl.to('#progress',{width:'100%',duration:16,ease:'none'},0);tl.to({}, {duration:.01},15.99);
+    tl.to('#progress',{width:'100%',duration:videoDuration,ease:'none'},0);tl.to({}, {duration:.01},videoDuration-.01);
     window.__timelines=window.__timelines||{};window.__timelines['markdown-review']=tl;
   })();
   </script>

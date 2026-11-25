@@ -65,11 +65,12 @@
         <p style="font-size:15px;line-height:1.55;color:#adbed0;margin:0">This is a review candidate, not a confirmed defect. Inspect the calling code and API contract before deciding on a fix.</p>
       </div>
     </div>
-    <div class="foot"><span>CODE REVIEW DEMO</span><div class="progress"><div id="progressFill"></div></div><span>12 SECOND TIMELINE</span></div>
+    <div class="foot"><span>CODE REVIEW DEMO</span><div class="progress"><div id="progressFill"></div></div><span>DYNAMIC TIMELINE</span></div>
     <script>
       // HyperFrames controls this paused timeline during preview and per-frame rendering.
       // All mutations are seekable GSAP tweens, not setTimeout or requestAnimationFrame.
       (function () {
+        const videoDuration=Number(document.getElementById('root').dataset.duration);
         const tl = gsap.timeline({ paused: true });
         const backgrounds = ['#15273b', '#15364b', '#594226', '#17443e'];
         const borders = ['#34506a', '#58c8e9', '#ffbf69', '#69d9b2'];
@@ -83,7 +84,7 @@
         // A finite 12-second master timeline.
         tl.set('#reviewTitle', { opacity: 1 }, 0);
         lines.forEach((selector, i) => {
-          const t = i * 3;
+          const t = i * (videoDuration / lines.length);
           // The focus moves to the next source line; earlier lines return to normal.
           tl.to('.line', { backgroundColor: 'rgba(0,0,0,0)', borderColor: 'rgba(0,0,0,0)', duration: 0.30 }, t);
           tl.to(selector, { backgroundColor: backgrounds[i], borderColor: borders[i], duration: 0.46 }, t + 0.12);
@@ -91,9 +92,9 @@
           tl.set('#reviewTitle', { textContent: titles[i][1] }, t);
           tl.set('#reviewBody', { textContent: titles[i][2] }, t);
         });
-        tl.to('#progressFill', { width: '100%', duration: 12, ease: 'none' }, 0);
+        tl.to('#progressFill', { width: '100%', duration: videoDuration, ease: 'none' }, 0);
         // Holds the last state until the end of the 12-second video.
-        tl.to({}, { duration: 0.01 }, 11.99);
+        tl.to({}, { duration: 0.01 }, videoDuration - 0.01);
         window.__timelines = window.__timelines || {};
         window.__timelines['java-code-review'] = tl;
       })();

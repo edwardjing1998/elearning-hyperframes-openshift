@@ -9,12 +9,13 @@
 <div class="board"><svg id="diagram" viewBox="0 0 1170 400"></svg></div><div id="detail"></div><div class="progress"><div id="fill"></div></div>
 <script>
 (function(){
+  const videoDuration=Number(document.getElementById('root').dataset.duration);
   const data={{RENDER_DATA}},svg=document.getElementById('diagram'),ns='http://www.w3.org/2000/svg';
   const put=(tag,attrs,txt)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));if(txt!==undefined)e.textContent=txt;svg.append(e);return e;};
   const n=data.participants.length;const xs=data.participants.map((_,i)=>95+i*(980/Math.max(1,n-1)));
-  document.getElementById('sub').textContent=n+' participants · '+data.messages.length+' messages · 16-second timeline';
+  document.getElementById('sub').textContent=n+' participants · '+data.messages.length+' messages · '+videoDuration.toFixed(1)+'-second timeline';
   data.participants.forEach((p,i)=>{const x=xs[i];put('rect',{x:x-76,y:18,width:152,height:54,rx:10,fill:'#173e54',stroke:'#4e86a0'});put('text',{x,y:41,'text-anchor':'middle',fill:'#fff','font-size':15,'font-weight':700},p.label.slice(0,21));put('text',{x,y:58,'text-anchor':'middle',fill:'#99cadb','font-size':11},p.role.slice(0,24));put('line',{x1:x,y1:73,x2:x,y2:375,stroke:'#42667d','stroke-dasharray':'5 5'});});
-  const tl=gsap.timeline({paused:true}),duration=14/data.messages.length;
+  const tl=gsap.timeline({paused:true}),duration=(videoDuration-2)/Math.max(1,data.messages.length);
   data.messages.forEach((m,i)=>{
     const from=data.participants.findIndex(p=>p.id===m.from),to=data.participants.findIndex(p=>p.id===m.to);
     const y=105+i*(245/Math.max(1,data.messages.length-1));let x1=xs[from],x2=xs[to];if(from===to)x2=x1+55;
@@ -26,8 +27,8 @@
     tl.to([line,triangle,label],{opacity:1,duration:.35},t+.15);
     tl.set('#detail',{textContent:String(i+1).padStart(2,'0')+' / '+data.messages.length+' · '+m.label},t);
   });
-  tl.to('#fill',{width:'100%',duration:16,ease:'none'},0);
-  tl.to({}, {duration:.01},15.99);
+  tl.to('#fill',{width:'100%',duration:videoDuration,ease:'none'},0);
+  tl.to({}, {duration:.01},videoDuration-.01);
   window.__timelines=window.__timelines||{};window.__timelines['sequence-diagram']=tl;
 })();
 </script></div></body></html>

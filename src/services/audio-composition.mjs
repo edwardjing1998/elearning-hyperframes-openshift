@@ -12,13 +12,13 @@ export function compositionDuration(html) {
   if (!match) throw new Error('Composition root duration missing');
   return Number(match[1]);
 }
-export function addNarrationAudio(html, audioDuration) {
-  const duration = compositionDuration(html);
-  // First version intentionally preserves ALL existing animation timing.
-  // Refuse to truncate narration; request shorter text or expand timeline in a later version.
-  if (audioDuration > duration - 0.25) {
-    throw new Error(`Narration ${audioDuration.toFixed(2)}s exceeds the ${duration}s composition; shorten narration.text (no audio trimming performed)`);
-  }
+export function addNarrationAudio(html, audioDuration, { tailPaddingSeconds = 2 } = {}) {
+  if (!Number.isFinite(audioDuration) || audioDuration <= 0) throw new Error('Invalid narration duration');
+  if (!Number.isFinite(tailPaddingSeconds) || tailPaddingSeconds < 0) throw new Error('Invalid narration padding');
+  const originalDuration = compositionDuration(html);
+  // Narration determines the minimum timeline length. Never trim speech.
+  const duration = Math.max(originalDuration, Math.ceil((audioDuration + tailPaddingSeconds) * 1000) / 1000);
+  html = html.replace(/(data-composition-id="[^"]+"[^>]*data-duration=")[0-9.]+(")/, (_, a, b) => `${a}${duration}${b}`);
   const tag = `<audio id="azure-narration" class="clip" data-volume="1" src="./assets/narration.wav" data-start="0" data-duration="${audioDuration.toFixed(3)}" data-track-index="10"></audio>`;
   // All four checked-in templates close the root DIV immediately before </body>.
   const end = /<\/div>\s*<\/body>/i;
