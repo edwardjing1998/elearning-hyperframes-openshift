@@ -5,6 +5,7 @@ import { wavDuration, addNarrationAudio, addSceneAudioClips } from './src/servic
 import { buildNarrationScenes, makeSceneTiming, injectSceneTiming } from './src/services/scene-narration.mjs';
 import { compileKafkaComposition, parseSequenceDiagram } from './src/loaders/diagram-loader.mjs';
 import { parseReviewMarkdown } from './src/loaders/markdown-loader.mjs';
+import { loadTemplateRegistry, resolveDocument, listDocuments } from './src/loaders/document-registry.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -17,36 +18,23 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.RENDER_DATA_DIR || '/data/jobs';
 const COMPOSITION = path.join(ROOT, 'composition');
 const TEMPLATES_DIR = path.join(COMPOSITION, 'templates');
-const REVIEW_DIR = path.join(COMPOSITION, 'documents', 'reviews');
-const DIAGRAM_DIR = path.join(COMPOSITION, 'documents', 'diagrams');
-const TEMPLATES = Object.freeze({
-  'code-review': 'index.html',
-  'kafka-sequence': 'kafka-sequence.html',
-  'markdown-review': 'markdown-review.html',
-  'sequence-diagram': 'sequence-diagram.html'
-});
-// Explicit file allowlists: never use arbitrary user-provided disk paths.
-const REVIEW_DOCS = Object.freeze({ 'java-code-review': 'java-code-review.md' });
-const DIAGRAM_DOCS = Object.freeze({ 'spring-boot-sequence': 'spring-boot-sequence.md', 'kafka-sequence': 'kafka-sequence.md' });
+const TEMPLATES = loadTemplateRegistry(COMPOSITION);
 function safeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
 }
-function getCompositionHtml(template, documentId) {
-  let html=fs.readFileSync(path.join(TEMPLATES_DIR,TEMPLATES[template]),'utf8');
-  if(template==='kafka-sequence') return compileKafkaComposition(html,fs.readFileSync(path.join(DIAGRAM_DIR,'kafka-sequence.md'),'utf8'));
-  if(template==='markdown-review') {
-    const filename=REVIEW_DOCS[documentId||'java-code-review'];
-    if(!filename) throw new Error('Unsupported review document');
-    const result=parseReviewMarkdown(fs.readFileSync(path.join(REVIEW_DIR,filename),'utf8'));
-    if(result.diagramMarkdown) result.diagram=parseSequenceDiagram(result.diagramMarkdown);
+function getCompositionHtml(template, document) {
+  const config=TEMPLATES[template];
+  if (!config) throw new Error('Unknown template');
+  let html=fs.readFileSync(path.join(TEMPLATES_DIR,config.html),'utf8');
+  if (config.type==='kafka') return compileKafkaComposition(html,document.markdown);
+  if (config.type==='review') {
+    const result=parseReviewMarkdown(document.markdown);
+    if (result.diagramMarkdown) result.diagram=parseSequenceDiagram(result.diagramMarkdown);
     delete result.diagramMarkdown;
     return html.replace('{{RENDER_DATA}}',safeJsonForScript(result));
   }
-  if(template==='sequence-diagram') {
-    const filename=DIAGRAM_DOCS[documentId||'spring-boot-sequence'];
-    if(!filename) throw new Error('Unsupported diagram document');
-    const result=parseSequenceDiagram(fs.readFileSync(path.join(DIAGRAM_DIR,filename),'utf8'));
-    return html.replace('{{RENDER_DATA}}',safeJsonForScript(result));
+  if (config.type==='sequence') {
+    return html.replace('{{RENDER_DATA}}',safeJsonForScript(parseSequenceDiagram(document.markdown)));
   }
   return html;
 }
@@ -92,10 +80,11 @@ async function renderNext() {
   const writeLog = (message) => fs.appendFileSync(logPath, String(message) + '\n');
   try {
     await fsp.mkdir(path.join(work,'assets'), {recursive:true});
-    let html = getCompositionHtml(job.template, job.documentId);
+    const document = resolveDocument(COMPOSITION,TEMPLATES[job.template],job.documentId);
+    let html = getCompositionHtml(job.template, document);
     await fsp.copyFile(path.join(COMPOSITION,'assets','gsap.min.js'),path.join(work,'assets','gsap.min.js'));
     if (job.narration.enabled && !job.narration.text) {
-      const scenes=buildNarrationScenes({template:job.template,documentId:job.documentId,reviewDir:REVIEW_DIR,diagramDir:DIAGRAM_DIR});
+      const scenes=buildNarrationScenes({type:TEMPLATES[job.template].type,markdown:document?.markdown});
       const clips=[];
       for (let i=0;i<scenes.length;i++) {
         const file=path.join(work,'assets',`narration-${String(i+1).padStart(3,'0')}.wav`);
@@ -108,7 +97,7 @@ async function renderNext() {
       html=addSceneAudioClips(html,clips,timing);
       writeLog(`[speech] ${clips.length} synchronized scenes, total ${timing.duration.toFixed(2)}s`);
     } else if (job.narration.enabled) {
-      const text = job.narration.text || makeNarration({template:job.template,documentId:job.documentId,reviewDir:REVIEW_DIR,diagramDir:DIAGRAM_DIR});
+      const text = job.narration.text || makeNarration({type:TEMPLATES[job.template].type,markdown:document?.markdown});
       writeLog(`[speech] Synthesizing ${text.length} characters using configured SPEECH_ENDPOINT and SPEECH_VOICE`);
       const file=path.join(work,'assets','narration.wav');
       await synthesizeWav(text,file);
@@ -163,24 +152,30 @@ http.createServer(async (req,res) => {
   if (req.method === 'GET' && route === '/composition/index.html') return staticFile(res, path.join(TEMPLATES_DIR,'index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && route === '/composition/kafka-sequence.html') {
     try {
-      const html = getCompositionHtml('kafka-sequence');
+      const html = getCompositionHtml('kafka-sequence',resolveDocument(COMPOSITION,TEMPLATES['kafka-sequence']));
       res.writeHead(200, { 'content-type':'text/html; charset=utf-8', 'cache-control':'no-store' });
       return res.end(html);
     } catch (err) { return sendJson(res, 500, { error:'Diagram compilation failed', detail:err.message }); }
   }
   if (req.method === 'GET' && route === '/composition/markdown-review.html') {
-    try { res.writeHead(200,{'content-type':'text/html; charset=utf-8'}); return res.end(getCompositionHtml('markdown-review')); }
+    try { res.writeHead(200,{'content-type':'text/html; charset=utf-8'}); return res.end(getCompositionHtml('markdown-review',resolveDocument(COMPOSITION,TEMPLATES['markdown-review']))); }
     catch(err) { return sendJson(res,500,{error:'Review compilation failed',detail:err.message}); }
   }
   if (req.method === 'GET' && route === '/composition/sequence-diagram.html') {
-    try { res.writeHead(200,{'content-type':'text/html; charset=utf-8'}); return res.end(getCompositionHtml('sequence-diagram')); }
+    try { res.writeHead(200,{'content-type':'text/html; charset=utf-8'}); return res.end(getCompositionHtml('sequence-diagram',resolveDocument(COMPOSITION,TEMPLATES['sequence-diagram']))); }
     catch(err) { return sendJson(res,500,{error:'Sequence compilation failed',detail:err.message}); }
   }
   if (req.method === 'GET' && route === '/composition/kafka-sequence.md')
-    return staticFile(res, path.join(DIAGRAM_DIR,'kafka-sequence.md'), 'text/markdown; charset=utf-8');
+    return staticFile(res, resolveDocument(COMPOSITION,TEMPLATES['kafka-sequence']).filename, 'text/markdown; charset=utf-8');
   if (req.method === 'GET' && route === '/composition/assets/gsap.min.js') return staticFile(res, path.join(COMPOSITION,'assets','gsap.min.js'), 'text/javascript; charset=utf-8');
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
+    if (req.method === 'GET' && route === '/api/templates') {
+      return sendJson(res,200,{templates:Object.entries(TEMPLATES).map(([name,config])=>({
+        name, type:config.type, default_document:config.defaultDocument??null,
+        documents:listDocuments(COMPOSITION,config)
+      }))});
+    }
     if (req.method === 'POST' && route === '/api/render') {
       if (active && queue.length >= 2) return sendJson(res, 429, { error:'Renderer busy: max 2 queued jobs' });
       // Optional JSON payload; never accept an arbitrary filesystem path or HTML URL.
@@ -200,14 +195,14 @@ http.createServer(async (req,res) => {
       if (!Object.hasOwn(TEMPLATES, template))
         return sendJson(res, 400, { error:'Unknown template', allowed_templates:Object.keys(TEMPLATES) });
       const documentId = config.document ?? null;
-      const allowedDocs = template==='markdown-review' ? REVIEW_DOCS : template==='sequence-diagram' ? DIAGRAM_DOCS : null;
-      if (allowedDocs && documentId!==null && !Object.hasOwn(allowedDocs,documentId))
-        return sendJson(res,400,{error:'Unknown Markdown document',allowed_documents:Object.keys(allowedDocs)});
-      if (!allowedDocs && documentId!==null)
-        return sendJson(res,400,{error:'document is only supported for markdown-review or sequence-diagram'});
-      // Validate source before enqueueing to avoid late failures.
-      try { getCompositionHtml(template, documentId); }
-      catch(err) { return sendJson(res,400,{error:'Invalid template source',detail:err.message}); }
+      let document;
+      try {
+        document = resolveDocument(COMPOSITION,TEMPLATES[template],documentId);
+        getCompositionHtml(template,document); // Validate before enqueueing.
+      } catch(err) {
+        return sendJson(res,400,{error:'Invalid template source or document',detail:err.message,
+          allowed_documents:listDocuments(COMPOSITION,TEMPLATES[template])});
+      }
       let narration;
       try { narration=validateNarrationRequest(config.narration); }
       catch(err) { return sendJson(res,400,{error:err.message}); }

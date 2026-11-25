@@ -1,0 +1,24 @@
+{
+  "code-review": {
+    "html": "index.html",
+    "type": "static"
+  },
+  "markdown-review": {
+    "html": "markdown-review.html",
+    "type": "review",
+    "documents": "reviews",
+    "defaultDocument": "java-code-review"
+  },
+  "sequence-diagram": {
+    "html": "sequence-diagram.html",
+    "type": "sequence",
+    "documents": "diagrams",
+    "defaultDocument": "spring-boot-sequence"
+  },
+  "kafka-sequence": {
+    "html": "kafka-sequence.html",
+    "type": "kafka",
+    "documents": "diagrams",
+    "defaultDocument": "kafka-sequence"
+  }
+}
