@@ -161,7 +161,32 @@ function stepEditor(){
     const remove=document.createElement('button');remove.textContent='Remove step';remove.onclick=()=>{narrationSteps.splice(i,1);stepEditor()};row.append(remove);card.append(row);
     const label=document.createElement('label');label.textContent='Narration (spoken during this step)';
     const text=document.createElement('textarea');text.placeholder='Explain this recorded action';text.maxLength=1200;text.value=s.text;
-    text.oninput=()=>{s.text=text.value};label.append(text);card.append(label);$('steps').append(card);
+    text.oninput=()=>{s.text=text.value;player.hidden=true;player.pause();details.textContent='Narration changed. Preview again to update the audio.';};label.append(text);card.append(label);
+    const panel=document.createElement('div');panel.className='narration-preview';
+    const preview=document.createElement('button');preview.textContent='Preview Azure Speech';
+    const details=document.createElement('small');details.textContent='No narration preview generated.';
+    const player=document.createElement('audio');player.controls=true;player.hidden=true;
+    let audioUrl=null;
+    preview.onclick=async()=>{
+      const current=s.text.trim();
+      if(!current){details.textContent='Enter narration text first.';return;}
+      preview.disabled=true;details.textContent='Generating Azure Speech...';
+      try {
+        const response=await fetch('/api/narration/preview',{
+          method:'POST',headers:{Authorization:auth(),'Content-Type':'application/json'},body:JSON.stringify({text:current})
+        });
+        const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);
+        const wavResponse=await fetch(result.audio_url,{headers:{Authorization:auth()}});
+        if(!wavResponse.ok)throw Error('Unable to retrieve preview WAV');
+        const blob=await wavResponse.blob();
+        if(audioUrl)URL.revokeObjectURL(audioUrl);
+        audioUrl=URL.createObjectURL(blob);previewUrls.push(audioUrl);
+        player.src=audioUrl;player.hidden=false;
+        details.textContent=`Duration: ${result.duration_seconds.toFixed(2)}s · ${result.cached?'Cached WAV':'New WAV'}`;
+      }catch(e){details.textContent='Preview failed: '+e.message;}
+      finally{preview.disabled=false;}
+    };
+    panel.append(preview,details,player);card.append(panel);$('steps').append(card);
   });
 }
 function selectRecording(blobName,duration,markers=[]){

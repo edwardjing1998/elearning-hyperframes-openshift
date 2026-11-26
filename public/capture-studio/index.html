@@ -13,7 +13,7 @@
 <section class="panel narration-panel"><h2>Action-Based Azure Speech Narration</h2>
 <p>Record, press <strong>Mark step</strong> when an action begins, upload the recording, then edit the timestamped narration steps. For an existing saved recording use <strong>Narrate</strong> and set the action timestamps manually.</p>
 <div id="recording-source" class="hint">No recording selected.</div><label>Recording duration (seconds; verify for imported WebM recordings) <input id="recording-duration" type="number" min="1" step="0.01" placeholder="Duration" disabled></label>
-<div id="steps" class="steps"></div>
+<p class="hint">Preview each step before rendering. Audio is cached in private Azure Blob Storage and reused for unchanged narration.</p><div id="steps" class="steps"></div>
 <div class="actions"><button id="add-step" disabled>Add narration step</button><button id="render-narration" disabled>Render narrated MP4</button></div>
 <pre id="render-status" role="status">No narration job.</pre>
 </section>

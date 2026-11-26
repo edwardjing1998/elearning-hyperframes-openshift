@@ -1,3 +1,4 @@
+import { handleNarrationPreviewApi } from './src/speech/narration-preview.mjs';
 import { handleCaptureApi } from './src/capture/capture-routes.mjs';
 import { handleRecordingApi } from './src/recordings/recording-routes.mjs';
 import { uploadRenderedVideo, validateStorageConfig } from './src/storage/azure-blob-storage.mjs';
@@ -179,6 +180,7 @@ http.createServer(async (req,res) => {
   if (req.method === 'GET' && route === '/composition/assets/gsap.min.js') return staticFile(res, path.join(COMPOSITION,'assets','gsap.min.js'), 'text/javascript; charset=utf-8');
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
+    if (route === '/api/narration/preview' || route.startsWith('/api/narration/previews/')) return handleNarrationPreviewApi(req,res,new URL(req.url, 'http://localhost'));
     if (route === '/api/captures' || route === '/api/captures/file') return handleCaptureApi(req,res,new URL(req.url, 'http://localhost'));
     if (route === '/api/recordings/render' || route.startsWith('/api/recording-jobs/')) return handleRecordingApi(req,res,new URL(req.url, 'http://localhost'));
     if (req.method === 'GET' && route === '/api/templates') {

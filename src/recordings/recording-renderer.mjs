@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { synthesizeWav } from '../speech/azure-speech.mjs';
+import { speechCacheKey, getCachedSpeech, downloadCachedSpeech, putCachedSpeech } from '../storage/speech-cache.mjs';
 import { wavDuration } from '../services/audio-composition.mjs';
 import { openCaptureBlob } from '../capture/capture-storage.mjs';
 import { makeActionPlan, validateNarrationSteps } from './action-plan.mjs';
@@ -86,7 +87,7 @@ export async function probeDuration(file, runner = runProcess) {
 
   return decodedSeconds;
 }
-export async function createNarratedRecording({blobName,scenes,jobDir,log=()=>{},speech=synthesizeWav,run=runProcess,load=openCaptureBlob,probe=probeDuration}) {
+export async function createNarratedRecording({blobName,scenes,jobDir,log=()=>{},speech=synthesizeWav,run=runProcess,load=openCaptureBlob,probe=probeDuration,cacheEnabled=(process.env.VIDEO_STORAGE_MODE === 'azure' && speech === synthesizeWav),cache={}}) {
   const requested=validateNarrationSteps(scenes);
   await fs.mkdir(jobDir,{recursive:true});
   const source=path.join(jobDir,'source.webm');
@@ -99,8 +100,16 @@ export async function createNarratedRecording({blobName,scenes,jobDir,log=()=>{}
   for (let i=0;i<requested.length;i++) {
     const filename=path.join(jobDir,`speech-${String(i+1).padStart(3,'0')}.wav`);
     log(`[speech] Step ${i+1}/${requested.length} starting`);
-    await speech(requested[i].text,filename);
+    const key = cacheEnabled ? speechCacheKey(requested[i].text) : null;
+    const found = key ? await getCachedSpeech(key,cache) : null;
+    if (found?.durationSeconds) {
+      await downloadCachedSpeech(key,filename,cache);
+      log(`[speech] Step ${i+1}: reused cached WAV`);
+    } else {
+      await speech(requested[i].text,filename);
+    }
     const duration=await wavDuration(filename);
+    if (key && !found?.durationSeconds) await putCachedSpeech(key,filename,duration,cache);
     wavs.push(filename);durations.push(duration);
     log(`[speech] Step ${i+1} ready (${duration.toFixed(2)} seconds)`);
   }
