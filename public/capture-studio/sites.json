@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "sites": [
+    {
+      "id": "azure-storage",
+      "name": "Azure Portal",
+      "url": "https://portal.azure.com/",
+      "course_id": "azure-storage",
+      "description": "Azure Storage accounts, containers, and blobs"
+    },
+    {
+      "id": "databricks",
+      "name": "Databricks",
+      "url": "https://www.databricks.com/",
+      "course_id": "databricks",
+      "description": "Databricks platform and workspace tutorials"
+    },
+    {
+      "id": "snowflake",
+      "name": "Snowflake",
+      "url": "https://app.snowflake.com/",
+      "course_id": "snowflake",
+      "description": "Snowflake account and data workflows"
+    }
+  ]
+}

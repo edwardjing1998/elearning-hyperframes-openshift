@@ -158,6 +158,8 @@ http.createServer(async (req,res) => {
     return staticFile(res, path.join(ROOT,'public','capture-studio','capture.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/styles.css')
     return staticFile(res, path.join(ROOT,'public','capture-studio','styles.css'), 'text/css; charset=utf-8');
+  if (req.method === 'GET' && route === '/capture-studio/sites.json')
+    return staticFile(res, path.join(ROOT,'public','capture-studio','sites.json'), 'application/json; charset=utf-8');
 
   if (req.method === 'GET' && route === '/composition/index.html') return staticFile(res, path.join(TEMPLATES_DIR,'index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && route === '/composition/kafka-sequence.html') {

@@ -2,13 +2,20 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HyperFrames Capture Studio</title><link rel="stylesheet" href="/capture-studio/styles.css"></head>
 <body><header><a href="/">HyperFrames</a><span>/ Capture Studio</span></header>
-<main><section class="intro"><h1>Capture Studio</h1><p>Capture real browser interactions for training videos. Select the Azure Portal tab or window when your browser asks for permission.</p></section>
-<div class="columns"><section class="panel"><h2>Capture</h2><div class="fields">
+<main><section class="intro"><h1>Capture Studio</h1><p>Capture real browser interactions for training videos. Choose a configured website, open it in a new tab, then explicitly share that tab or window. You can capture any permitted website, not just Azure Portal.</p></section>
+<div class="columns"><section class="panel"><h2>Capture</h2>
+<div class="site-picker"><h3>Capture target</h3>
+<label for="target-site">Website</label><select id="target-site"><option value="">Loading websites...</option></select>
+<div id="custom-site-group" hidden><label for="custom-site-url">Custom HTTPS website URL</label><input id="custom-site-url" type="url" placeholder="https://example.com/" inputmode="url" spellcheck="false"></div>
+<p id="target-description" class="hint">Select a target website or enter a custom HTTPS URL.</p>
+<div class="actions"><button id="open-site" type="button">Open website in new tab</button></div>
+<p class="hint">The website opens separately. Return here, choose Share tab / window, then select the target tab in your browser's sharing dialog. This application cannot read another site's page or select a shared tab automatically.</p>
+</div><div class="fields">
 <label>Course ID <input id="course" value="azure-storage" pattern="[a-z0-9-]+" required></label>
 <label>Render API token <input id="token" type="password" placeholder="Bearer token (not stored)" autocomplete="off" spellcheck="false"></label></div>
 <div class="actions"><button id="share">1. Share tab / window</button><button id="snapshot" disabled>Take PNG snapshot</button><button id="start" disabled>Start recording</button><button id="mark" disabled>Mark step</button><button id="stop" disabled>Stop recording</button><button id="unshare" disabled>Stop sharing</button></div>
 <div class="preview"><video id="live" autoplay muted playsinline></video><div id="placeholder">Select Share tab / window to see a live preview</div></div>
-<p class="hint">You must manually approve screen sharing. This app does not control Azure Portal or capture passwords automatically. Avoid selecting this Studio tab itself.</p>
+<p class="hint">You must manually approve screen sharing. This app does not automate login or capture passwords. Avoid selecting this Studio tab itself. Review any captured material for secrets before upload.</p>
 </section><section class="panel"><h2>Review & upload</h2><div id="assets" class="assets" aria-live="polite"><p>No captures yet.</p></div><div class="actions"><button id="refresh">List saved captures</button></div><div id="saved" class="saved"></div><pre id="status" role="status">Ready.</pre></section></div>
 <section class="panel narration-panel"><h2>Action-Based Azure Speech Narration</h2>
 <p>Record, press <strong>Mark step</strong> when an action begins, upload the recording, then edit the timestamped narration steps. For an existing saved recording use <strong>Narrate</strong> and set the action timestamps manually.</p>

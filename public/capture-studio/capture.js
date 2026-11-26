@@ -1,5 +1,68 @@
 const $ = id => document.getElementById(id);
 const live = $('live');
+// Sites are configured in public/capture-studio/sites.json. Users may also open a custom HTTPS site.
+const sitesById = new Map();
+function checkedSiteUrl(raw) {
+  const value = String(raw || '').trim();
+  if (!value || value.length > 2048) throw new Error('Enter an HTTPS website URL');
+  let url;
+  try { url = new URL(value); } catch { throw new Error('Enter a valid HTTPS URL'); }
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) {
+    throw new Error('Only HTTPS website URLs without embedded credentials are allowed');
+  }
+  return url.href;
+}
+function selectedSite() {
+  const id = $('target-site').value;
+  if (id === 'custom') return {name:'Custom website',url:checkedSiteUrl($('custom-site-url').value)};
+  const site = sitesById.get(id);
+  if (!site) throw new Error('Select a website first');
+  return {...site,url:checkedSiteUrl(site.url)};
+}
+function updateSelectedSite() {
+  const custom = $('target-site').value === 'custom';
+  $('custom-site-group').hidden = !custom;
+  if (custom) {
+    $('target-description').textContent = 'Enter the HTTPS address of the web application you want to demonstrate.';
+  } else {
+    const site = sitesById.get($('target-site').value);
+    $('target-description').textContent = site ? `${site.description || site.name} · ${site.url}` : 'Select a website.';
+    if (site?.course_id) $('course').value = site.course_id;
+  }
+}
+async function loadCaptureSites() {
+  try {
+    const response = await fetch('/capture-studio/sites.json', {cache:'no-store'});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const config = await response.json();
+    if (!Array.isArray(config.sites)) throw new Error('Site configuration must include sites array');
+    const select = $('target-site');
+    select.replaceChildren();
+    for (const item of config.sites) {
+      if (!item || !/^[a-z0-9-]+$/.test(item.id || '') || sitesById.has(item.id) || item.id==='custom') continue;
+      try { checkedSiteUrl(item.url); } catch { continue; }
+      sitesById.set(item.id, item);
+      const opt=document.createElement('option');opt.value=item.id;opt.textContent=item.name || item.id;select.append(opt);
+    }
+    const custom=document.createElement('option');custom.value='custom';custom.textContent='Custom HTTPS website';select.append(custom);
+    updateSelectedSite();
+  } catch (e) {
+    const select=$('target-site');select.replaceChildren();
+    const custom=document.createElement('option');custom.value='custom';custom.textContent='Custom HTTPS website';select.append(custom);
+    updateSelectedSite();
+    status('Website configuration could not be loaded; custom HTTPS URL is still available: '+e.message);
+  }
+}
+$('target-site').addEventListener('change',updateSelectedSite);
+$('open-site').onclick=()=>{
+  try {
+    const site=selectedSite();
+    // Must be called from the click handler to avoid popup blockers.
+    window.open(site.url,'_blank','noopener,noreferrer');
+    status(`Requested a new tab for ${site.name}. If it did not open, allow pop-ups. Return here and explicitly share the target tab/window.`);
+  } catch(e) { status('Cannot open website: '+e.message); }
+};
+loadCaptureSites();
 let stream = null;
 let recorder = null;
 let recorded = [];
@@ -84,7 +147,7 @@ $('start').onclick=()=>{
       if(blob.size) addAsset(blob,'recording',{duration:recordedDuration,markers:lastMarkers});
       status(blob.size?'Recording captured. Review before upload.':'No video captured.');
     };
-    recorder.start(1000);recording=true;updateControls();status('Recording. Type and click normally in the shared Azure Portal tab.');
+    recorder.start(1000);recording=true;updateControls();status('Recording. Type and click normally in the shared website tab/window.');
   } catch(e) { status('Recording failed: '+e.message); }
 };
 $('stop').onclick=()=>{if(recorder?.state==='recording')recorder.stop()};
