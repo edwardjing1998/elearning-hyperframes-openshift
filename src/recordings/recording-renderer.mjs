@@ -7,7 +7,7 @@ import { synthesizeWav } from '../speech/azure-speech.mjs';
 import { speechCacheKey, getCachedSpeech, downloadCachedSpeech, putCachedSpeech } from '../storage/speech-cache.mjs';
 import { wavDuration } from '../services/audio-composition.mjs';
 import { openCaptureBlob } from '../capture/capture-storage.mjs';
-import { makeActionPlan, validateNarrationSteps } from './action-plan.mjs';
+import { makeActionPlan, validateNarrationSteps, validateStepRanges } from './action-plan.mjs';
 
 export function runProcess(command,args,{cwd,log,timeoutMs=600000}={}) {
   return new Promise((resolve,reject)=>{
@@ -96,6 +96,14 @@ export async function createNarratedRecording({blobName,scenes,jobDir,log=()=>{}
   await pipeline(streamResult.stream, (await import('node:fs')).createWriteStream(source,{mode:0o600}));
   log('[capture] Recording downloaded');
   const sourceSeconds=await probe(source,run);
+  log(`[timeline] Server recording duration: ${sourceSeconds.toFixed(3)}s`);
+  for (const [index, step] of requested.entries()) {
+    log(`[timeline] Step ${index + 1}: start=${step.start_seconds.toFixed(3)}s, end=${step.end_seconds.toFixed(3)}s`);
+  }
+  // Validate video ranges BEFORE loading/synthesizing speech, so invalid ranges
+  // produce an informative error without spending time on WAV generation.
+  validateStepRanges(requested, sourceSeconds);
+  log('[timeline] All step ranges validated');
   const wavs=[],durations=[];
   for (let i=0;i<requested.length;i++) {
     const filename=path.join(jobDir,`speech-${String(i+1).padStart(3,'0')}.wav`);
