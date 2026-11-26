@@ -154,8 +154,6 @@ http.createServer(async (req,res) => {
   if (req.method === 'GET' && route === '/') return staticFile(res, path.join(ROOT,'public','index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && (route === '/capture-studio' || route === '/capture-studio/'))
     return staticFile(res, path.join(ROOT,'public','capture-studio','index.html'), 'text/html; charset=utf-8');
-  if (req.method === 'GET' && ['/capture-studio/typewriter.js','/capture-studio/scene-manifest-browser.js'].includes(route))
-    return staticFile(res, path.join(ROOT,'public','capture-studio',path.basename(route)), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/capture.js')
     return staticFile(res, path.join(ROOT,'public','capture-studio','capture.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/styles.css')

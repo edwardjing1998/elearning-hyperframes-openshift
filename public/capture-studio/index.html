@@ -17,15 +17,6 @@
 <div class="preview"><video id="live" autoplay muted playsinline></video><div id="placeholder">Select Share tab / window to see a live preview</div></div>
 <p class="hint">You must manually approve screen sharing. This app does not automate login or capture passwords. Avoid selecting this Studio tab itself. Review any captured material for secrets before upload.</p>
 </section><section class="panel"><h2>Review & upload</h2><div id="assets" class="assets" aria-live="polite"><p>No captures yet.</p></div><div class="actions"><button id="refresh">List saved captures</button></div><div id="saved" class="saved"></div><pre id="status" role="status">Ready.</pre></section></div>
-<section class="panel typewriter-panel" aria-labelledby="typewriter-heading">
-<h2 id="typewriter-heading">Animated Paste · typeText</h2>
-<p>Type code progressively over a shared website recording. The animation is drawn into the captured WebM; it does <strong>not</strong> edit the external site's text field. The action is also saved in a versioned Scene Manifest.</p>
-<label for="typewriter-code">Source code</label><textarea id="typewriter-code" spellcheck="false" placeholder="Paste SQL, Python, Java or other source code"></textarea>
-<div class="typewriter-controls"><label>Reveal mode<select id="typewriter-mode"><option value="character">Character by character</option><option value="line">Line by line</option></select></label><label>Delay (ms / character or line)<input id="typewriter-delay" type="number" min="5" max="2000" value="60"></label></div>
-<div class="actions"><button id="typewriter-preview" type="button">Preview animation</button><button id="typewriter-record" type="button" disabled>Animate in recording</button><button id="typewriter-clear" type="button">Clear overlay</button><button id="export-manifest" type="button" disabled>Download Scene Manifest</button></div>
-<div class="typing-preview"><pre id="typing-output" aria-live="off">Your animated source code appears here.</pre></div>
-<p class="hint">The overlay is added to a composited recording canvas. To type into a real external editor, use authorized Playwright automation instead.</p>
-</section>
 <section class="panel narration-panel"><h2>Action-Based Azure Speech Narration</h2>
 <p>Record, press <strong>Mark step</strong> when an action begins, upload the recording, then edit the timestamped narration steps. For an existing saved recording use <strong>Narrate</strong> and set the action timestamps manually.</p>
 <div id="recording-source" class="hint">No recording selected.</div><label>Recording duration (seconds; verify for imported WebM recordings) <input id="recording-duration" type="number" min="1" step="0.01" placeholder="Duration" disabled></label>
