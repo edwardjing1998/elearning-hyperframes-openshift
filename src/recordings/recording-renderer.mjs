@@ -19,15 +19,72 @@ export function runProcess(command,args,{cwd,log,timeoutMs=600000}={}) {
     child.on('close',code=>{if(settled)return;settled=true;clearTimeout(timer);code===0?resolve():reject(new Error(`${command} exited with code ${code}`));});
   });
 }
-export async function probeDuration(file,runner=runProcess){
-  // Use a small separate process so malformed recording input cannot be parsed as source data.
-  let output='';
-  await runner('ffprobe',['-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',file],{
-    log:x=>{output+=x},timeoutMs:30000
-  });
-  const duration=Number(output.trim());
-  if (!Number.isFinite(duration) || duration<1) throw new Error('Unable to read recording duration');
-  return duration;
+export async function probeDuration(file, runner = runProcess) {
+  let output = '';
+
+  // First: try reading container metadata.
+  await runner(
+    'ffprobe',
+    [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      file
+    ],
+    {
+      log: text => { output += text; },
+      timeoutMs: 30000
+    }
+  );
+
+  const duration = Number(output.trim());
+
+  if (Number.isFinite(duration) && duration >= 1) {
+    return duration;
+  }
+
+  // Fallback: decode video frames to determine duration.
+  let progress = '';
+
+  await runner(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-nostats',
+      '-v', 'error',
+      '-i', file,
+      '-map', '0:v:0',
+      '-an',
+      '-f', 'null',
+      '-progress', 'pipe:1',
+      '-'
+    ],
+    {
+      log: text => { progress += text; },
+      timeoutMs: 120000
+    }
+  );
+
+  const matches = [
+    ...progress.matchAll(/^out_time_us=(\d+)$/gm)
+  ];
+
+  const last = matches.at(-1);
+
+  const decodedSeconds = last
+    ? Number(last[1]) / 1_000_000
+    : NaN;
+
+  if (
+    !Number.isFinite(decodedSeconds) ||
+    decodedSeconds < 1
+  ) {
+    throw new Error(
+      'Unable to determine recording duration from WebM metadata or decoded frames'
+    );
+  }
+
+  return decodedSeconds;
 }
 export async function createNarratedRecording({blobName,scenes,jobDir,log=()=>{},speech=synthesizeWav,run=runProcess,load=openCaptureBlob,probe=probeDuration}) {
   const requested=validateNarrationSteps(scenes);
