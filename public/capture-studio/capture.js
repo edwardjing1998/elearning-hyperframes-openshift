@@ -1,3 +1,4 @@
+import { typewriterFrame, typewriterUnits } from './typewriter.js';
 const $ = id => document.getElementById(id);
 const live = $('live');
 // Sites are configured in public/capture-studio/sites.json. Users may also open a custom HTTPS site.
@@ -70,6 +71,87 @@ let currentChunks = [];
 let previewUrls = [];
 let recording = false;
 let recordedDuration=0;let lastMarkers=[];
+let recordedActions=[];
+let activeTyping=null;
+let recordingCanvas=null;
+let recordingCanvasTimer=null;
+let recordingCanvasStream=null;
+let previewTypingTimer=null;
+function typewriterSettings() {
+  const text=$('typewriter-code').value;
+  const mode=$('typewriter-mode').value;
+  const delay_ms=Number($('typewriter-delay').value);
+  if (!text || text.length>20000) throw Error('Enter 1..20000 source-code characters');
+  if (!['character','line'].includes(mode) || !Number.isFinite(delay_ms) || delay_ms<5 || delay_ms>2000) throw Error('Invalid typing mode or delay');
+  return {text,animation:{mode,delay_ms,show_cursor:true}};
+}
+function currentTyping(now=performance.now()) {
+  if (!activeTyping) return '';
+  const frame=typewriterFrame(activeTyping.text,activeTyping.animation,now-activeTyping.startedAt);
+  const shown=frame.text+(activeTyping.animation.show_cursor&&!frame.done?'▌':'');
+  if (frame.done && now-activeTyping.startedAt > frame.duration_ms+2000) activeTyping=null;
+  return shown;
+}
+function renderTypingPreview(now=performance.now()) {
+  const result=currentTyping(now);
+  $('typing-output').textContent=result || 'No active animation.';
+  if (activeTyping) previewTypingTimer=requestAnimationFrame(renderTypingPreview);
+  else previewTypingTimer=null;
+}
+function startTyping(includeInRecording) {
+  const settings=typewriterSettings();
+  if (previewTypingTimer) cancelAnimationFrame(previewTypingTimer);
+  const now=performance.now();
+  activeTyping={...settings,startedAt:now};
+  if (includeInRecording) {
+    if (!recording) throw Error('Start recording before animating code');
+    const start=Math.max(0,(now-recordingStartedAt)/1000);
+    recordedActions.push({type:'typeText',target:'capture-overlay',text:settings.text,start_seconds:start,animation:settings.animation});
+    if (start>.25 && !stepMarkers.some(v=>Math.abs(v-start)<.15)) stepMarkers.push(start);
+    status(`typeText overlay added at ${start.toFixed(2)}s. This is drawn into the WebM, not typed into the external page.`);
+  }
+  renderTypingPreview();
+}
+$('typewriter-preview').onclick=()=>{try{startTyping(false)}catch(e){status('Typewriter preview: '+e.message)}};
+$('typewriter-record').onclick=()=>{try{startTyping(true)}catch(e){status('Typewriter recording: '+e.message)}};
+$('typewriter-clear').onclick=()=>{activeTyping=null;if(previewTypingTimer)cancelAnimationFrame(previewTypingTimer);previewTypingTimer=null;$('typing-output').textContent='Overlay cleared.'};
+function drawRecordingCanvas() {
+  if (!recordingCanvas || !live.videoWidth) return;
+  const context=recordingCanvas.getContext('2d');
+  const {width,height}=recordingCanvas;
+  context.fillStyle='#000';context.fillRect(0,0,width,height);
+  context.drawImage(live,0,0,width,height);
+  const text=currentTyping();
+  if (text) {
+    const padding=Math.round(width*.025),lineHeight=Math.max(18,Math.round(height*.027));
+    const fontSize=Math.max(14,Math.round(height*.023));
+    const panelHeight=Math.round(height*.43);
+    context.fillStyle='rgba(5,18,32,0.93)';context.fillRect(padding,height-panelHeight-padding,width-2*padding,panelHeight);
+    context.font=`${fontSize}px monospace`;context.fillStyle='#def7ff';
+    const maxWidth=width-4*padding;const lines=[];
+    for (const originalLine of text.split('\n')) {
+      let line='';
+      for(const ch of originalLine){
+        if(context.measureText(line+ch).width>maxWidth && line){lines.push(line);line='';}
+        line+=ch;
+      }
+      lines.push(line);
+    }
+    const maxLines=Math.floor((panelHeight-2*padding)/lineHeight);
+    lines.slice(-maxLines).forEach((line,i)=>context.fillText(line,2*padding,height-panelHeight+padding+fontSize+i*lineHeight));
+  }
+}
+function stopRecordingCanvas(){if(recordingCanvasTimer){clearInterval(recordingCanvasTimer);recordingCanvasTimer=null;}recordingCanvasStream?.getTracks().forEach(t=>t.stop());recordingCanvasStream=null;recordingCanvas=null;}
+function startRecordingCanvas(){
+  const canvas=document.createElement('canvas');
+  canvas.width=live.videoWidth||1280;canvas.height=live.videoHeight||720;
+  if (!canvas.captureStream) throw Error('Canvas capture is unavailable in this browser');
+  recordingCanvas=canvas;drawRecordingCanvas();
+  recordingCanvasStream=canvas.captureStream(30);
+  recordingCanvasTimer=setInterval(drawRecordingCanvas,33);
+  return recordingCanvasStream;
+}
+
 const status = (message) => { $('status').textContent = message; };
 const updateControls = () => {
   const active = !!stream && stream.getVideoTracks().some(track => track.readyState === 'live');
@@ -78,6 +160,7 @@ const updateControls = () => {
   $('start').disabled=!active || recording;
   $('stop').disabled=!recording;
   $('mark').disabled=!recording;
+  $('typewriter-record').disabled=!recording;
   $('unshare').disabled=!active;
   $('placeholder').hidden=active;
 };
@@ -109,7 +192,7 @@ function addAsset(blob,kind,recordMeta=null) {
   const save=document.createElement('button');save.textContent='Upload to Azure';
   save.onclick=async()=>{save.disabled=true;try{
     const result=await uploadAsset(blob,kind);status('Uploaded to '+result.container+'/'+result.blob_name);
-    if(kind==='recording'){const d=await durationOfBlob(blob,recordMeta?.duration||1);selectRecording(result.blob_name,d,recordMeta?.markers||[]);}
+    if(kind==='recording'){const d=await durationOfBlob(blob,recordMeta?.duration||1);selectRecording(result.blob_name,d,recordMeta?.markers||[],recordMeta?.actions||[]);}
     save.textContent='Uploaded';await refresh();
   }catch(err){save.disabled=false;status('Upload failed: '+err.message)}};
   const download=document.createElement('button');download.textContent='Download locally';
@@ -135,16 +218,19 @@ $('start').onclick=()=>{
     if (!stream)throw new Error('Share a tab first');
     const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(MediaRecorder.isTypeSupported);
     if(!mime)throw new Error('This browser does not support WebM recording; try Chrome or Edge');
-    currentChunks=[];stepMarkers=[];recordingStartedAt=performance.now();
-    recorder=new MediaRecorder(stream,{mimeType:mime});
+    currentChunks=[];stepMarkers=[];recordedActions=[];activeTyping=null;recordingStartedAt=performance.now();
+    const compositedStream=startRecordingCanvas();
+    try {recorder=new MediaRecorder(compositedStream,{mimeType:mime});}
+    catch(e){stopRecordingCanvas();throw e;}
     recorder.ondataavailable=e=>{if(e.data.size) currentChunks.push(e.data)};
     recorder.onerror=e=>status('Recording error: '+(e.error?.message||'unknown'));
     recorder.onstop=()=>{
       recordedDuration=Math.max(1,(performance.now()-recordingStartedAt)/1000);lastMarkers=stepMarkers.slice();
-      recording=false;updateControls();
+      const lastActions=recordedActions.map(a=>({...a}));
+      stopRecordingCanvas();recording=false;activeTyping=null;updateControls();
       const blob=new Blob(currentChunks,{type:'video/webm'});
       currentChunks=[];
-      if(blob.size) addAsset(blob,'recording',{duration:recordedDuration,markers:lastMarkers});
+      if(blob.size) addAsset(blob,'recording',{duration:recordedDuration,markers:lastMarkers,actions:lastActions});
       status(blob.size?'Recording captured. Review before upload.':'No video captured.');
     };
     recorder.start(1000);recording=true;updateControls();status('Recording. Type and click normally in the shared website tab/window.');
@@ -222,6 +308,11 @@ function stepEditor(){
       wrapper.append(inp);row.append(wrapper);
     }
     const remove=document.createElement('button');remove.textContent='Remove step';remove.onclick=()=>{narrationSteps.splice(i,1);stepEditor()};row.append(remove);card.append(row);
+    if (s.actions?.length) {
+      const summary=document.createElement('p');summary.className='hint';
+      summary.textContent=s.actions.map(a=>`${a.type} overlay (${a.animation.mode}, ${a.animation.delay_ms}ms)`).join(' · ');
+      card.append(summary);
+    }
     const label=document.createElement('label');label.textContent='Narration (spoken during this step)';
     const text=document.createElement('textarea');text.placeholder='Explain this recorded action';text.maxLength=1200;text.value=s.text;
     text.oninput=()=>{s.text=text.value;player.hidden=true;player.pause();details.textContent='Narration changed. Preview again to update the audio.';};label.append(text);card.append(label);
@@ -252,17 +343,17 @@ function stepEditor(){
     panel.append(preview,details,player);card.append(panel);$('steps').append(card);
   });
 }
-function selectRecording(blobName,duration,markers=[]){
+function selectRecording(blobName,duration,markers=[],actions=[]){
   selectedBlobName=blobName;chosenDuration=duration;
   const bounds=[0,...markers.filter(t=>t>=0.25&&t<duration-0.25).sort((a,b)=>a-b),duration];
   narrationSteps=[];
   for(let i=0;i<bounds.length-1;i++){
     if(bounds[i+1]-bounds[i]<0.25)continue;
-    narrationSteps.push({start_seconds:bounds[i],end_seconds:bounds[i+1],text:''});
+    narrationSteps.push({start_seconds:bounds[i],end_seconds:bounds[i+1],text:'',actions:actions.filter(a=>a.start_seconds>=bounds[i]-.001 && a.start_seconds<bounds[i+1]+.001).map(a=>({...a,start_seconds:Math.max(0,a.start_seconds-bounds[i])}))});
   }
   $('recording-source').textContent=`Selected: ${blobName} · ${duration.toFixed(2)} seconds`;
   $('recording-duration').disabled=false;$('recording-duration').value=duration.toFixed(2);
-  $('add-step').disabled=false;$('render-narration').disabled=false;stepEditor();
+  $('add-step').disabled=false;$('render-narration').disabled=false;$('export-manifest').disabled=false;stepEditor();
 }
 async function durationOfBlob(blob,fallback){
   const url=URL.createObjectURL(blob);
@@ -282,6 +373,15 @@ $('recording-duration').onchange=()=>{
 $('add-step').onclick=()=>{
   if(!chosenDuration)return;
   narrationSteps.push({start_seconds:0,end_seconds:chosenDuration,text:''});stepEditor();
+};
+$('export-manifest').onclick=async()=>{
+  try {
+    if(!selectedBlobName)throw Error('Select an uploaded recording first');
+    const {validateSceneManifest}=await import('/capture-studio/scene-manifest-browser.js');
+    const manifest=validateSceneManifest({version:1,scenes:narrationSteps.map((s,i)=>({id:`step-${i+1}`,start_seconds:s.start_seconds,end_seconds:s.end_seconds,narration:{text:s.text},actions:s.actions||[]}))});
+    const blob=new Blob([JSON.stringify({source_blob:selectedBlobName,...manifest},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='scene-manifest.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){status('Scene Manifest export failed: '+e.message)}
 };
 $('render-narration').onclick=async()=>{
   try{
