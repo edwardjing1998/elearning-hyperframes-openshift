@@ -317,7 +317,32 @@ function stepEditor(){
       inp.onchange=()=>{s[key]=Number(inp.value)};
       wrapper.append(inp);row.append(wrapper);
     }
-    const remove=document.createElement('button');remove.textContent='Remove step';remove.onclick=()=>{narrationSteps.splice(i,1);stepEditor()};row.append(remove);
+    // Exclude this time interval and its narration from the final MP4.
+    // The original uploaded WebM stays unchanged.
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove Video Segment';
+    remove.title = 'Exclude this scene and its narration from the final MP4';
+    remove.onclick = () => {
+      if (narrationSteps.length <= 1) {
+        status('Cannot remove the last scene. At least one scene is required.');
+        return;
+      }
+      const start = Number(s.start_seconds);
+      const end = Number(s.end_seconds);
+      const confirmed = window.confirm(
+        `Remove Step ${i + 1}?\n\n` +
+        `Video range: ${start.toFixed(2)}s - ${end.toFixed(2)}s\n` +
+        `Duration: ${(end - start).toFixed(2)} seconds\n\n` +
+        'This video segment and its narration will be excluded from the final MP4.\n\n' +
+        'The original WebM recording will not be changed.'
+      );
+      if (!confirmed) return;
+      narrationSteps.splice(i, 1);
+      stepEditor();
+      status(`Removed video segment ${start.toFixed(2)}s - ${end.toFixed(2)}s from the render plan.`);
+    };
+    row.append(remove);
     const split=document.createElement('button');split.type='button';split.textContent='Split at playhead';
     split.onclick=()=>{try{splitStep(i,scrubVideo.currentTime)}catch(e){status('Split failed: '+e.message)}};
     row.append(split);card.append(row);
