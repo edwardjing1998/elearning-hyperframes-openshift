@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {validatePlan,assertPublicHost} from '../src/agentic/plan.mjs';
+const env={AGENTIC_ALLOWED_ORIGINS:'https://example.com,https://portal.azure.com'};
+const good={title:'Training',course_id:'demo',scenes:[{type:'screenshot',url:'https://example.com/page',narration:'Hello world.'}]};
+test('valid plan',()=>{const p=validatePlan(good,env);assert.equal(p.scenes[0].duration_seconds,8);});
+test('blocks unapproved host',()=>assert.throws(()=>validatePlan({...good,scenes:[{...good.scenes[0],url:'https://evil.example/'}]},env),/allowlisted/));
+test('blocks non-HTTPS',()=>assert.throws(()=>validatePlan({...good,scenes:[{...good.scenes[0],url:'http://example.com/'}]},env),/allowlisted/));
+test('rejects action execution',()=>assert.throws(()=>validatePlan({...good,scenes:[{...good.scenes[0],type:'click'}]},env),/screenshot/));
+test('blocks invalid narration',()=>assert.throws(()=>validatePlan({...good,scenes:[{...good.scenes[0],narration:''}]},env),/narration/));
+test('blocks local DNS',async()=>await assert.rejects(()=>assertPublicHost('test.example',async()=>[{address:'127.0.0.1'}]),/non-public/));

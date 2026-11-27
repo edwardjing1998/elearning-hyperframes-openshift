@@ -1,3 +1,4 @@
+import {handleAgenticApi} from './src/agentic/routes.mjs';
 import { handleNarrationPreviewApi } from './src/speech/narration-preview.mjs';
 import { handleCaptureApi } from './src/capture/capture-routes.mjs';
 import { handleRecordingApi } from './src/recordings/recording-routes.mjs';
@@ -158,6 +159,10 @@ http.createServer(async (req,res) => {
     return staticFile(res, path.join(ROOT,'public','capture-studio','capture.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/styles.css')
     return staticFile(res, path.join(ROOT,'public','capture-studio','styles.css'), 'text/css; charset=utf-8');
+  if (req.method === 'GET' && (route === '/agentic-video' || route === '/agentic-video/'))
+    return staticFile(res, path.join(ROOT,'public','agentic-video','index.html'), 'text/html; charset=utf-8');
+  if (req.method === 'GET' && route === '/agentic-video/app.js') return staticFile(res,path.join(ROOT,'public','agentic-video','app.js'),'text/javascript; charset=utf-8');
+  if (req.method === 'GET' && route === '/agentic-video/styles.css') return staticFile(res,path.join(ROOT,'public','agentic-video','styles.css'),'text/css; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/sites.json')
     return staticFile(res, path.join(ROOT,'public','capture-studio','sites.json'), 'application/json; charset=utf-8');
 
@@ -182,6 +187,7 @@ http.createServer(async (req,res) => {
   if (req.method === 'GET' && route === '/composition/assets/gsap.min.js') return staticFile(res, path.join(COMPOSITION,'assets','gsap.min.js'), 'text/javascript; charset=utf-8');
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
+    if (route.startsWith('/api/agentic/')) return handleAgenticApi(req,res,new URL(req.url,'http://localhost'));
     if (route === '/api/narration/preview' || route.startsWith('/api/narration/previews/')) return handleNarrationPreviewApi(req,res,new URL(req.url, 'http://localhost'));
     if (route === '/api/captures' || route === '/api/captures/file') return handleCaptureApi(req,res,new URL(req.url, 'http://localhost'));
     if (route === '/api/recordings/render' || route.startsWith('/api/recording-jobs/')) return handleRecordingApi(req,res,new URL(req.url, 'http://localhost'));
