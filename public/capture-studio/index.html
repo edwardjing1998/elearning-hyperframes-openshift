@@ -19,7 +19,15 @@
 </section><section class="panel"><h2>Review & upload</h2><div id="assets" class="assets" aria-live="polite"><p>No captures yet.</p></div><div class="actions"><button id="refresh">List saved captures</button></div><div id="saved" class="saved"></div><pre id="status" role="status">Ready.</pre></section></div>
 <section class="panel narration-panel"><h2>Action-Based Azure Speech Narration</h2>
 <p>Record, press <strong>Mark step</strong> when an action begins, upload the recording, then edit the timestamped narration steps. For an existing saved recording use <strong>Narrate</strong> and set the action timestamps manually.</p>
-<div id="recording-source" class="hint">No recording selected.</div><label>Recording duration (seconds; verify for imported WebM recordings) <input id="recording-duration" type="number" min="1" step="0.01" placeholder="Duration" disabled></label>
+<div id="recording-source" class="hint">No recording selected.</div>
+<div class="scene-preview-box">
+  <h3>Scene Split &amp; Preview</h3>
+  <p class="hint">Load the selected WebM, scrub to the action boundary and click <strong>Split at playhead</strong> on the step to divide it. For single-scene preview, first generate that step's Azure Speech WAV.</p>
+  <div class="actions"><button type="button" id="load-scene-video">Load recording for editing</button><button type="button" id="stop-scene-preview">Stop scene preview</button></div>
+  <video id="scene-video" controls playsinline preload="metadata"></video>
+  <audio id="scene-audio" preload="auto" hidden></audio>
+  <p id="scene-preview-status" class="hint" role="status">Select a recording to begin.</p>
+</div><label>Recording duration (seconds; verify for imported WebM recordings) <input id="recording-duration" type="number" min="1" step="0.01" placeholder="Duration" disabled></label>
 <p class="hint">Preview each step before rendering. Audio is cached in private Azure Blob Storage and reused for unchanged narration.</p><div id="steps" class="steps"></div>
 <div class="actions"><button id="add-step" disabled>Add narration step</button><button id="render-narration" disabled>Render narrated MP4</button></div>
 <pre id="render-status" role="status">No narration job.</pre>

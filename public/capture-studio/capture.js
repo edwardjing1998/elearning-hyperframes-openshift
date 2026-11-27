@@ -202,6 +202,101 @@ let selectedBlobName=null;
 let chosenDuration=0;
 let narrationSteps=[];
 let recordingJobTimer=null;
+// Single-scene previews are browser-only: no MP4 is rendered or uploaded.
+let previewRecordingUrl=null;
+let previewRecordingName=null;
+let activeScene=null;
+const scrubVideo=$('scene-video');
+const sceneAudio=$('scene-audio');
+const EPS=0.04;
+
+function stopScenePreview() {
+  if (activeScene) {
+    activeScene=null;
+    scrubVideo.pause();
+    sceneAudio.pause();
+    sceneAudio.currentTime=0;
+    $('scene-preview-status').textContent='Preview stopped. Scrub the video to choose another split point.';
+  }
+}
+function resetSceneSource() {
+  stopScenePreview();
+  scrubVideo.pause();
+  scrubVideo.removeAttribute('src');
+  scrubVideo.load();
+  if (previewRecordingUrl) URL.revokeObjectURL(previewRecordingUrl);
+  previewRecordingUrl=null;
+  previewRecordingName=null;
+}
+async function loadSceneVideo() {
+  if (!selectedBlobName) throw new Error('Select an uploaded WebM recording first');
+  if (previewRecordingName===selectedBlobName && previewRecordingUrl) return;
+  resetSceneSource();
+  $('scene-preview-status').textContent='Loading recording for scene preview...';
+  const response=await fetch('/api/captures/file?name='+encodeURIComponent(selectedBlobName),
+    {headers:{Authorization:auth()}});
+  if (!response.ok) {
+    let message=`HTTP ${response.status}`;
+    try {message=(await response.json()).error||message;} catch {}
+    throw new Error(message);
+  }
+  const blob=await response.blob();
+  if (!blob.size) throw new Error('The recording is empty');
+  previewRecordingUrl=URL.createObjectURL(blob);
+  previewRecordingName=selectedBlobName;
+  scrubVideo.src=previewRecordingUrl;
+  scrubVideo.load();
+  $('scene-preview-status').textContent='Recording ready. Scrub to a point, then click Split at playhead.';
+}
+function actualSpeechDuration(s) {
+  return s._speechText===s.text.trim() && Number.isFinite(s._speechDuration)
+    ? s._speechDuration : null;
+}
+function comparisonText(s) {
+  const speech=actualSpeechDuration(s);
+  const seconds=s.end_seconds-s.start_seconds;
+  if (speech===null) return `Video: ${seconds.toFixed(2)}s · Preview Azure Speech to measure audio`;
+  const hold=Math.max(0,speech+0.5-seconds);
+  return `Video: ${seconds.toFixed(2)}s · Speech: ${speech.toFixed(2)}s · `+
+    (hold>0?`Estimated final-frame hold: ${hold.toFixed(2)}s`:'No frame hold needed');
+}
+function splitStep(index,time) {
+  const step=narrationSteps[index];
+  if (!step || !Number.isFinite(time)) throw new Error('Select a valid playhead position');
+  if (time-step.start_seconds<0.25 || step.end_seconds-time<0.25)
+    throw new Error(`Place the playhead at least 0.25s inside Step ${index+1}`);
+  const end=step.end_seconds;
+  step.end_seconds=time;
+  // Clear narration for the second half, so the author can write a focused new sentence.
+  narrationSteps.splice(index+1,0,{start_seconds:time,end_seconds:end,text:''});
+  stepEditor();
+}
+function scenePreviewTick() {
+  if (!activeScene) return;
+  if (scrubVideo.currentTime>=activeScene.end-EPS) {
+    scrubVideo.pause();
+    // Preserve the last meaningful frame while narration continues.
+    if (scrubVideo.currentTime>activeScene.end) scrubVideo.currentTime=Math.max(activeScene.start,activeScene.end-EPS);
+    activeScene.videoDone=true;
+  }
+  finishSceneIfReady();
+}
+function finishSceneIfReady() {
+  if (!activeScene) return;
+  if (activeScene.videoDone && (sceneAudio.ended || sceneAudio.paused && sceneAudio.currentTime>=sceneAudio.duration-EPS)) {
+    activeScene=null;
+    $('scene-preview-status').textContent='Scene preview finished.';
+  }
+}
+scrubVideo.addEventListener('timeupdate',scenePreviewTick);
+scrubVideo.addEventListener('ended',()=>{if(activeScene){activeScene.videoDone=true;finishSceneIfReady();}});
+sceneAudio.addEventListener('ended',finishSceneIfReady);
+$('load-scene-video').onclick=()=>loadSceneVideo().catch(e=>{
+  $('scene-preview-status').textContent='Preview load failed: '+e.message;
+});
+$('stop-scene-preview').onclick=stopScenePreview;
+window.addEventListener('pagehide',resetSceneSource);
+
 $('mark').onclick=()=>{
   if(!recording)return;
   const seconds=Math.max(0,(performance.now()-recordingStartedAt)/1000);
@@ -210,6 +305,7 @@ $('mark').onclick=()=>{
   status(`Marked step at ${seconds.toFixed(2)} seconds. Return to the shared tab to continue.`);
 };
 function stepEditor(){
+  stopScenePreview();
   $('steps').replaceChildren();
   narrationSteps.forEach((s,i)=>{
     const card=document.createElement('div');card.className='step';
@@ -221,10 +317,18 @@ function stepEditor(){
       inp.onchange=()=>{s[key]=Number(inp.value)};
       wrapper.append(inp);row.append(wrapper);
     }
-    const remove=document.createElement('button');remove.textContent='Remove step';remove.onclick=()=>{narrationSteps.splice(i,1);stepEditor()};row.append(remove);card.append(row);
+    const remove=document.createElement('button');remove.textContent='Remove step';remove.onclick=()=>{narrationSteps.splice(i,1);stepEditor()};row.append(remove);
+    const split=document.createElement('button');split.type='button';split.textContent='Split at playhead';
+    split.onclick=()=>{try{splitStep(i,scrubVideo.currentTime)}catch(e){status('Split failed: '+e.message)}};
+    row.append(split);card.append(row);
     const label=document.createElement('label');label.textContent='Narration (spoken during this step)';
     const text=document.createElement('textarea');text.placeholder='Explain this recorded action';text.maxLength=1200;text.value=s.text;
-    text.oninput=()=>{s.text=text.value;player.hidden=true;player.pause();details.textContent='Narration changed. Preview again to update the audio.';};label.append(text);card.append(label);
+    text.oninput=()=>{s.text=text.value;player.hidden=true;player.pause();
+      details.textContent='Narration changed. Preview again to update the audio.';
+      comparison.textContent=comparisonText(s);
+    };label.append(text);card.append(label);
+    const comparison=document.createElement('p');comparison.className='scene-comparison';
+    comparison.textContent=comparisonText(s);card.append(comparison);
     const panel=document.createElement('div');panel.className='narration-preview';
     const preview=document.createElement('button');preview.textContent='Preview Azure Speech';
     const details=document.createElement('small');details.textContent='No narration preview generated.';
@@ -245,14 +349,51 @@ function stepEditor(){
         if(audioUrl)URL.revokeObjectURL(audioUrl);
         audioUrl=URL.createObjectURL(blob);previewUrls.push(audioUrl);
         player.src=audioUrl;player.hidden=false;
+        s._speechDuration=result.duration_seconds;
+        s._speechText=current;
+        s._audioUrl=audioUrl;
+        comparison.textContent=comparisonText(s);
         details.textContent=`Duration: ${result.duration_seconds.toFixed(2)}s · ${result.cached?'Cached WAV':'New WAV'}`;
       }catch(e){details.textContent='Preview failed: '+e.message;}
       finally{preview.disabled=false;}
     };
-    panel.append(preview,details,player);card.append(panel);$('steps').append(card);
+    const playScene=document.createElement('button');playScene.textContent='Preview synchronized scene';
+    playScene.onclick=async()=>{
+      try {
+        if (!s._audioUrl || actualSpeechDuration(s)===null)
+          throw new Error('Preview Azure Speech first, after finishing your narration text');
+        await loadSceneVideo();
+        stopScenePreview();
+        const start=s.start_seconds, end=s.end_seconds;
+        if (!(end-start>=0.25)) throw new Error('Step must last at least 0.25s');
+        if (end>chosenDuration+0.05) throw new Error('Step end exceeds recording duration');
+        sceneAudio.src=s._audioUrl;
+        sceneAudio.load();
+        // Wait for the recording to seek before speech begins.
+        if (Math.abs(scrubVideo.currentTime-start)>EPS) {
+          await new Promise((resolve,reject)=>{
+            const timeout=setTimeout(()=>{cleanup();reject(new Error('Video seek timed out'));},5000);
+            const cleanup=()=>{clearTimeout(timeout);scrubVideo.removeEventListener('seeked',onSeek);scrubVideo.removeEventListener('error',onError);};
+            const onSeek=()=>{cleanup();resolve();};
+            const onError=()=>{cleanup();reject(new Error('Recording cannot be decoded'));};
+            scrubVideo.addEventListener('seeked',onSeek,{once:true});
+            scrubVideo.addEventListener('error',onError,{once:true});
+            scrubVideo.currentTime=start;
+          });
+        }
+        sceneAudio.currentTime=0;
+        activeScene={start,end,videoDone:false};
+        $('scene-preview-status').textContent=`Previewing Step ${i+1}: ${comparisonText(s)}`;
+        // Both play() calls originate in this user action; either may reject
+        // for unsupported audio or media decoding.
+        await Promise.all([scrubVideo.play(),sceneAudio.play()]);
+      } catch(e) {stopScenePreview();status('Scene preview failed: '+e.message)}
+    };
+    panel.append(preview,playScene,details,player);card.append(panel);$('steps').append(card);
   });
 }
 function selectRecording(blobName,duration,markers=[]){
+  if (blobName!==previewRecordingName) resetSceneSource();
   selectedBlobName=blobName;chosenDuration=duration;
   const bounds=[0,...markers.filter(t=>t>=0.25&&t<duration-0.25).sort((a,b)=>a-b),duration];
   narrationSteps=[];
@@ -281,7 +422,9 @@ $('recording-duration').onchange=()=>{
 };
 $('add-step').onclick=()=>{
   if(!chosenDuration)return;
-  narrationSteps.push({start_seconds:0,end_seconds:chosenDuration,text:''});stepEditor();
+  const lastEnd=narrationSteps.length?Math.max(...narrationSteps.map(s=>s.end_seconds)):0;
+  if (chosenDuration-lastEnd<0.25) {status('No unused time remains. Use Split at playhead instead.');return;}
+  narrationSteps.push({start_seconds:lastEnd,end_seconds:chosenDuration,text:''});stepEditor();
 };
 $('render-narration').onclick=async()=>{
   try{
