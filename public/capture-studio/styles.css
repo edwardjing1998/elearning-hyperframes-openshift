@@ -20,3 +20,12 @@
 #scene-video{width:100%;max-height:440px;background:#050d17;border-radius:8px}
 .scene-comparison{font-size:13px;color:#80d5eb;margin:8px 0}
 .scene-preview-box .actions{margin:10px 0}
+
+/* Render API authentication */
+.auth-controls{margin-top:12px;display:grid;gap:9px}
+.auth-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.auth-remember{display:flex;align-items:center;gap:8px}
+.auth-remember input{width:auto;margin:0;padding:0;accent-color:#249ed6}
+.auth-status{font-size:13px;line-height:1.5;padding:8px 10px;border-radius:7px;border:1px solid #52738b;color:#bfd4e6}
+.auth-status[data-state="success"]{color:#a7f3d0;background:#103a34;border-color:#237d66}
+.auth-status[data-state="error"]{color:#fecaca;background:#49252d;border-color:#a74e5c}

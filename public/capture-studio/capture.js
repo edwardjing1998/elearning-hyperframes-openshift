@@ -1,4 +1,10 @@
+import { createRenderAuth } from './auth.js';
 const $ = id => document.getElementById(id);
+const renderAuth = createRenderAuth({
+  input: $('token'), remember: $('remember-auth'),
+  testButton: $('test-auth'), clearButton: $('clear-auth'),
+  status: $('auth-status')
+});
 const live = $('live');
 // Sites are configured in public/capture-studio/sites.json. Users may also open a custom HTTPS site.
 const sitesById = new Map();
@@ -110,7 +116,8 @@ function addAsset(blob,kind,recordMeta=null) {
   save.onclick=async()=>{save.disabled=true;try{
     const result=await uploadAsset(blob,kind);status('Uploaded to '+result.container+'/'+result.blob_name);
     if(kind==='recording'){const d=await durationOfBlob(blob,recordMeta?.duration||1);selectRecording(result.blob_name,d,recordMeta?.markers||[]);}
-    save.textContent='Uploaded';await refresh();
+    save.textContent='Uploaded';
+    try { await refresh(); } catch (err) { status('Uploaded successfully; saved list refresh failed: '+err.message); }
   }catch(err){save.disabled=false;status('Upload failed: '+err.message)}};
   const download=document.createElement('button');download.textContent='Download locally';
   download.onclick=()=>{const a=document.createElement('a');a.href=url;a.download=`capture-${Date.now()}.${kind==='screenshot'?'png':'webm'}`;a.click();};
@@ -156,16 +163,16 @@ function courseId(){
   if(!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name))throw new Error('Invalid course ID');
   return name;
 }
-function auth(){const token=$('token').value;if(!token)throw new Error('Enter the Render API token');return 'Bearer '+token}
+function auth(){return renderAuth.authorization();}
 async function uploadAsset(blob,kind){
-  const response=await fetch('/api/captures',{
+  const response=await renderAuth.request('/api/captures',{
     method:'POST',headers:{'Authorization':auth(),'Content-Type':kind==='screenshot'?'image/png':'video/webm',
       'X-Course-Id':courseId(),'X-Capture-Kind':kind},body:blob
   });
   const result=await response.json();if(!response.ok)throw new Error(result.error||`HTTP ${response.status}`);return result;
 }
 async function refresh(){
-  const response=await fetch('/api/captures?course='+encodeURIComponent(courseId()),{headers:{Authorization:auth()}});
+  const response=await renderAuth.request('/api/captures?course='+encodeURIComponent(courseId()),{headers:{Authorization:auth()}});
   const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
   const list=$('saved');list.replaceChildren();
   if(!data.items.length){list.textContent='No saved captures for this course.';return}
@@ -174,7 +181,7 @@ async function refresh(){
     button.title=item.blob_name;
     button.onclick=async()=>{
       try{
-        const r=await fetch('/api/captures/file?name='+encodeURIComponent(item.blob_name),{headers:{Authorization:auth()}});
+        const r=await renderAuth.request('/api/captures/file?name='+encodeURIComponent(item.blob_name),{headers:{Authorization:auth()}});
         if(!r.ok){const err=await r.json();throw Error(err.error||`HTTP ${r.status}`)}
         const file=await r.blob();const url=URL.createObjectURL(file);
         const a=document.createElement('a');a.href=url;a.download=item.blob_name.split('/').pop();a.click();
@@ -183,7 +190,7 @@ async function refresh(){
     };
     list.append(button);
     if(item.content_type==='video/webm'){const narrate=document.createElement('button');narrate.textContent='Narrate recording';narrate.onclick=async()=>{try{
-      const r=await fetch('/api/captures/file?name='+encodeURIComponent(item.blob_name),{headers:{Authorization:auth()}});if(!r.ok)throw Error('Recording download failed');
+      const r=await renderAuth.request('/api/captures/file?name='+encodeURIComponent(item.blob_name),{headers:{Authorization:auth()}});if(!r.ok)throw Error('Recording download failed');
       const blob=await r.blob();const duration=await durationOfBlob(blob,1);selectRecording(item.blob_name,duration);
       status('Recording selected. Enter action timestamps and narration.');
     }catch(e){status('Could not select recording: '+e.message)}};list.append(narrate);}
@@ -233,7 +240,7 @@ async function loadSceneVideo() {
   if (previewRecordingName===selectedBlobName && previewRecordingUrl) return;
   resetSceneSource();
   $('scene-preview-status').textContent='Loading recording for scene preview...';
-  const response=await fetch('/api/captures/file?name='+encodeURIComponent(selectedBlobName),
+  const response=await renderAuth.request('/api/captures/file?name='+encodeURIComponent(selectedBlobName),
     {headers:{Authorization:auth()}});
   if (!response.ok) {
     let message=`HTTP ${response.status}`;
@@ -364,11 +371,11 @@ function stepEditor(){
       if(!current){details.textContent='Enter narration text first.';return;}
       preview.disabled=true;details.textContent='Generating Azure Speech...';
       try {
-        const response=await fetch('/api/narration/preview',{
+        const response=await renderAuth.request('/api/narration/preview',{
           method:'POST',headers:{Authorization:auth(),'Content-Type':'application/json'},body:JSON.stringify({text:current})
         });
         const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);
-        const wavResponse=await fetch(result.audio_url,{headers:{Authorization:auth()}});
+        const wavResponse=await renderAuth.request(result.audio_url,{headers:{Authorization:auth()}});
         if(!wavResponse.ok)throw Error('Unable to retrieve preview WAV');
         const blob=await wavResponse.blob();
         if(audioUrl)URL.revokeObjectURL(audioUrl);
@@ -457,20 +464,20 @@ $('render-narration').onclick=async()=>{
     const scenes=narrationSteps.map(s=>({...s})).sort((a,b)=>a.start_seconds-b.start_seconds);
     if(!scenes.length||scenes.some(s=>!s.text.trim()))throw Error('Provide narration for every step');
     $('render-narration').disabled=true;
-    const response=await fetch('/api/recordings/render',{method:'POST',headers:{Authorization:auth(),'Content-Type':'application/json'},
+    const response=await renderAuth.request('/api/recordings/render',{method:'POST',headers:{Authorization:auth(),'Content-Type':'application/json'},
       body:JSON.stringify({blob_name:selectedBlobName,scenes})});
     const data=await response.json();if(!response.ok)throw Error(data.error||`HTTP ${response.status}`);
     $('render-status').textContent=`Job ${data.job_id}: ${data.status}`;
     if(recordingJobTimer)clearInterval(recordingJobTimer);
     const poll=async()=>{
-      const r=await fetch('/api/recording-jobs/'+data.job_id,{headers:{Authorization:auth()}});
+      const r=await renderAuth.request('/api/recording-jobs/'+data.job_id,{headers:{Authorization:auth()}});
       const j=await r.json();if(!r.ok)throw Error(j.error||`HTTP ${r.status}`);
       $('render-status').textContent=JSON.stringify(j,null,2);
       if(j.status==='completed'||j.status==='failed'){
         clearInterval(recordingJobTimer);recordingJobTimer=null;$('render-narration').disabled=false;
         if(j.status==='completed'){
           const button=document.createElement('button');button.textContent='Download narrated MP4';
-          button.onclick=async()=>{const r=await fetch(j.download_url,{headers:{Authorization:auth()}});if(!r.ok)throw Error('MP4 download failed');const video=await r.blob();const url=URL.createObjectURL(video);const a=document.createElement('a');a.href=url;a.download='narrated-'+data.job_id+'.mp4';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)};
+          button.onclick=async()=>{const r=await renderAuth.request(j.download_url,{headers:{Authorization:auth()}});if(!r.ok)throw Error('MP4 download failed');const video=await r.blob();const url=URL.createObjectURL(video);const a=document.createElement('a');a.href=url;a.download='narrated-'+data.job_id+'.mp4';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)};
           $('render-status').after(button);
         }
       }

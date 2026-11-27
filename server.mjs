@@ -157,6 +157,8 @@ http.createServer(async (req,res) => {
     return staticFile(res, path.join(ROOT,'public','capture-studio','index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/capture.js')
     return staticFile(res, path.join(ROOT,'public','capture-studio','capture.js'), 'text/javascript; charset=utf-8');
+  if (req.method === 'GET' && route === '/capture-studio/auth.js')
+    return staticFile(res, path.join(ROOT,'public','capture-studio','auth.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && route === '/capture-studio/styles.css')
     return staticFile(res, path.join(ROOT,'public','capture-studio','styles.css'), 'text/css; charset=utf-8');
   if (req.method === 'GET' && (route === '/agentic-video' || route === '/agentic-video/'))
@@ -187,6 +189,8 @@ http.createServer(async (req,res) => {
   if (req.method === 'GET' && route === '/composition/assets/gsap.min.js') return staticFile(res, path.join(COMPOSITION,'assets','gsap.min.js'), 'text/javascript; charset=utf-8');
   if (route.startsWith('/api/')) {
     if (!safeAuth(req)) return sendJson(res, 401, { error:'Unauthorized: supply Authorization: Bearer <RENDER_API_TOKEN>' });
+    if (req.method === 'GET' && route === '/api/auth/verify')
+      return sendJson(res, 200, { authenticated: true });
     if (route.startsWith('/api/agentic/')) return handleAgenticApi(req,res,new URL(req.url,'http://localhost'));
     if (route === '/api/narration/preview' || route.startsWith('/api/narration/previews/')) return handleNarrationPreviewApi(req,res,new URL(req.url, 'http://localhost'));
     if (route === '/api/captures' || route === '/api/captures/file') return handleCaptureApi(req,res,new URL(req.url, 'http://localhost'));

@@ -12,7 +12,12 @@
 <p class="hint">The website opens separately. Return here, choose Share tab / window, then select the target tab in your browser's sharing dialog. This application cannot read another site's page or select a shared tab automatically.</p>
 </div><div class="fields">
 <label>Course ID <input id="course" value="azure-storage" pattern="[a-z0-9-]+" required></label>
-<label>Render API token <input id="token" type="password" placeholder="Bearer token (not stored)" autocomplete="off" spellcheck="false"></label></div>
+<label>Render API token <input id="token" type="password" placeholder="Enter Render API token" autocomplete="off" spellcheck="false"></label></div>
+<div class="auth-controls">
+  <div class="auth-buttons"><button type="button" id="test-auth">Test Connection</button><button type="button" id="clear-auth">Clear Token</button></div>
+  <label class="auth-remember"><input type="checkbox" id="remember-auth"> Remember verified token for this tab session</label>
+  <div id="auth-status" class="auth-status" data-state="pending" role="status" aria-live="polite">Authentication not verified. Test before recording.</div>
+</div>
 <div class="actions"><button id="share">1. Share tab / window</button><button id="snapshot" disabled>Take PNG snapshot</button><button id="start" disabled>Start recording</button><button id="mark" disabled>Mark step</button><button id="stop" disabled>Stop recording</button><button id="unshare" disabled>Stop sharing</button></div>
 <div class="preview"><video id="live" autoplay muted playsinline></video><div id="placeholder">Select Share tab / window to see a live preview</div></div>
 <p class="hint">You must manually approve screen sharing. This app does not automate login or capture passwords. Avoid selecting this Studio tab itself. Review any captured material for secrets before upload.</p>

@@ -1,4 +1,3 @@
-
 name: Build and deploy HyperFrames renderer
 
 on:
@@ -79,16 +78,35 @@ jobs:
           oc login --server="$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN"
           oc project "${OPENSHIFT_NAMESPACE:-edward-jing-dev}"
 
-          # Preserve existing renderer API authentication.
-          if [ "${#RENDER_API_TOKEN}" -lt 20 ]; then
-            echo "Error: RENDER_API_TOKEN must contain at least 20 characters" >&2
-            exit 1
-          fi
+          # OpenShift is authoritative once the secret exists.
+          # Rotate explicitly instead of replacing during deployments.
+          existing_secret="$(oc get secret hyperframes-api --ignore-not-found -o name)"
 
-          printf '%s' "$RENDER_API_TOKEN" | \
-            oc create secret generic hyperframes-api \
-              --from-file=RENDER_API_TOKEN=/dev/stdin \
-              --dry-run=client -o yaml | oc apply -f -
+          if [ -n "$existing_secret" ]; then
+
+            token_length="$(oc get secret hyperframes-api -o jsonpath='{.data.RENDER_API_TOKEN}' | base64 --decode | wc -c)"
+
+            if [ "$token_length" -lt 20 ]; then
+              echo "Error: Existing hyperframes-api token is missing or too short." >&2
+              exit 1
+            fi
+
+            echo "Preserving existing OpenShift Render API token."
+
+          else
+
+            if [ "${#RENDER_API_TOKEN}" -lt 20 ]; then
+              echo "Error: RENDER_API_TOKEN must contain at least 20 characters." >&2
+              exit 1
+            fi
+
+            printf '%s' "$RENDER_API_TOKEN" | \
+              oc create secret generic hyperframes-api \
+                --from-file=RENDER_API_TOKEN=/dev/stdin
+
+            echo "Initialized Render API secret."
+
+          fi
 
           # Configure Azure Speech.
           SPEECH_MODE="${SPEECH_MODE:-disabled}"
@@ -131,7 +149,8 @@ jobs:
                 --dry-run=client -o yaml | oc apply -f -
           fi
 
-          # Azure Blob Storage is opt-in; keep existing rendering working when disabled.
+          # Azure Blob Storage is opt-in;
+          # keep existing rendering working when disabled.
           VIDEO_STORAGE_MODE="${VIDEO_STORAGE_MODE:-disabled}"
           AZURE_STORAGE_CONTAINER="${AZURE_STORAGE_CONTAINER:-elearning-videos}"
           AZURE_STORAGE_PREFIX="${AZURE_STORAGE_PREFIX:-hyperframes}"
