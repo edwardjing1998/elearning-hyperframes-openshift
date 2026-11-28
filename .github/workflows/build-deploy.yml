@@ -58,16 +58,23 @@ jobs:
           OPENSHIFT_SERVER: ${{ vars.OPENSHIFT_SERVER }}
           OPENSHIFT_NAMESPACE: ${{ vars.OPENSHIFT_NAMESPACE }}
           OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+
           RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
+
           SPEECH_MODE: ${{ vars.SPEECH_MODE }}
           SPEECH_ENDPOINT: ${{ vars.SPEECH_ENDPOINT }}
           SPEECH_VOICE: ${{ vars.SPEECH_VOICE }}
           SPEECH_KEY: ${{ secrets.SPEECH_KEY }}
+
           VIDEO_STORAGE_MODE: ${{ vars.VIDEO_STORAGE_MODE }}
           AZURE_STORAGE_CONTAINER: ${{ vars.AZURE_STORAGE_CONTAINER }}
           AZURE_STORAGE_PREFIX: ${{ vars.AZURE_STORAGE_PREFIX }}
           AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+
+          AGENTIC_VIDEO_ENABLED: ${{ vars.AGENTIC_VIDEO_ENABLED }}
+
           IMAGE: ${{ needs.build.outputs.image }}
+
         run: |
           set -euo pipefail
 
@@ -77,6 +84,10 @@ jobs:
 
           oc login --server="$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN"
           oc project "${OPENSHIFT_NAMESPACE:-edward-jing-dev}"
+
+          # ==================================================
+          # Existing Render API authentication
+          # ==================================================
 
           # OpenShift is authoritative once the secret exists.
           # Rotate explicitly instead of replacing during deployments.
@@ -108,7 +119,10 @@ jobs:
 
           fi
 
-          # Configure Azure Speech.
+          # ==================================================
+          # Existing Azure Speech configuration
+          # ==================================================
+
           SPEECH_MODE="${SPEECH_MODE:-disabled}"
           SPEECH_VOICE="${SPEECH_VOICE:-en-US-JennyNeural}"
 
@@ -149,6 +163,10 @@ jobs:
                 --dry-run=client -o yaml | oc apply -f -
           fi
 
+          # ==================================================
+          # Existing Azure Blob Storage configuration
+          # ==================================================
+
           # Azure Blob Storage is opt-in;
           # keep existing rendering working when disabled.
           VIDEO_STORAGE_MODE="${VIDEO_STORAGE_MODE:-disabled}"
@@ -181,13 +199,64 @@ jobs:
                 --dry-run=client -o yaml | oc apply -f -
           fi
 
+          # ==================================================
+          # NEW: Generic Agentic Video configuration
+          # ==================================================
+
+          # Disabled by default if not configured in GitHub.
+          AGENTIC_VIDEO_ENABLED="${AGENTIC_VIDEO_ENABLED:-false}"
+
+          case "$AGENTIC_VIDEO_ENABLED" in
+            true|false)
+              ;;
+            *)
+              echo "Invalid AGENTIC_VIDEO_ENABLED; use true or false" >&2
+              exit 1
+              ;;
+          esac
+
+          # Read the previous feature flag for rollout detection.
+          previous_agentic_enabled="$(oc get configmap \
+            hyperframes-agentic-config \
+            --ignore-not-found \
+            -o jsonpath='{.data.AGENTIC_VIDEO_ENABLED}')"
+
+          # Create or update the Agentic Video ConfigMap.
+          oc create configmap hyperframes-agentic-config \
+            --from-literal=AGENTIC_VIDEO_ENABLED="$AGENTIC_VIDEO_ENABLED" \
+            --dry-run=client -o yaml | oc apply -f -
+
+          echo "Agentic video enabled: $AGENTIC_VIDEO_ENABLED"
+
+          # ==================================================
+          # OpenShift deployment
+          # ==================================================
+
+          # Read the current deployment image.
+          previous_image="$(oc get deployment \
+            elearning-hyperframes-renderer \
+            --ignore-not-found \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="renderer")].image}')"
+
           # Private GHCR images require ghcr-pull.
           oc apply -f openshift/deployment.yaml
 
           oc set image deployment/elearning-hyperframes-renderer \
             renderer="$IMAGE"
 
-          # oc set image triggers a rollout for the new commit SHA.
+          # A new image triggers a rollout automatically.
+          # If only the agentic flag changed while using the
+          # same image, restart to reload ConfigMap values.
+          if [ "$previous_image" = "$IMAGE" ] && \
+             [ "$previous_agentic_enabled" != "$AGENTIC_VIDEO_ENABLED" ]; then
+
+            echo "Agentic configuration changed; restarting deployment."
+
+            oc rollout restart \
+              deployment/elearning-hyperframes-renderer
+
+          fi
+
           oc rollout status deployment/elearning-hyperframes-renderer \
             --timeout=8m
 

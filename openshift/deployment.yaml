@@ -30,6 +30,12 @@ spec:
               value: "8080"
             - name: RENDER_DATA_DIR
               value: /data/jobs
+            - name: AGENTIC_VIDEO_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperframes-agentic-config
+                  key: AGENTIC_VIDEO_ENABLED
+                  optional: true
             - name: RENDER_API_TOKEN
               valueFrom:
                 secretKeyRef:
