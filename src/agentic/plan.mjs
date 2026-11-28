@@ -29,7 +29,11 @@ export function validatePlan(input, env = process.env) {
     if (allowedOrigins.length && !allowedOrigins.includes(u.origin)) throw new Error(`Scene ${i+1}: URL origin not allowlisted`);
     if (typeof scene.narration!=='string'||!scene.narration.trim()||scene.narration.length>1200) throw new Error(`Scene ${i+1}: narration must be 1..1200 characters`);
     if (scene.duration_seconds !== undefined && (!Number.isFinite(scene.duration_seconds)||scene.duration_seconds<2||scene.duration_seconds>90))throw new Error(`Scene ${i+1}: duration must be 2..90 seconds`);
-    return {type:'screenshot',url:u.href,narration:scene.narration.trim(),duration_seconds:scene.duration_seconds??8};
+    if (scene.wait_seconds !== undefined && (!Number.isFinite(scene.wait_seconds)||scene.wait_seconds<0||scene.wait_seconds>30))throw new Error(`Scene ${i+1}: wait_seconds must be 0..30 seconds`);
+    if (scene.wait_for_selector !== undefined && (typeof scene.wait_for_selector!=='string'||!scene.wait_for_selector.trim()||scene.wait_for_selector.length>300))throw new Error(`Scene ${i+1}: wait_for_selector must be 1..300 characters`);
+    return {type:'screenshot',url:u.href,narration:scene.narration.trim(),duration_seconds:scene.duration_seconds??8,
+      ...(scene.wait_seconds===undefined?{}:{wait_seconds:scene.wait_seconds}),
+      ...(scene.wait_for_selector===undefined?{}:{wait_for_selector:scene.wait_for_selector.trim()})};
   });
   return {title:input.title.trim(),course_id:input.course_id,scenes};
 }

@@ -31,3 +31,18 @@ test('public DNS rejects private, special-use, mixed, and empty DNS results',asy
     return [{address:'8.8.8.8'},{address:'2606:4700::1111'}];
   }),[{address:'8.8.8.8',family:4},{address:'2606:4700::1111',family:6}]);
 });
+
+test('existing scenes retain their normalized shape without new options',()=>{
+  assert.deepEqual(validatePlan(good,env).scenes,[{...good.scenes[0],duration_seconds:8}]);
+});
+test('optional capture readiness controls are separate from video duration',()=>{
+  const scene={...good.scenes[0],duration_seconds:60,wait_seconds:20,wait_for_selector:'  h1  '};
+  const result=validatePlan({...good,scenes:[scene]},env).scenes[0];
+  assert.deepEqual(result,{...scene,wait_for_selector:'h1'});
+  assert.equal(validatePlan({...good,scenes:[{...scene,wait_seconds:0}]},env).scenes[0].wait_seconds,0);
+  assert.equal(validatePlan({...good,scenes:[{...scene,wait_seconds:30}]},env).scenes[0].wait_seconds,30);
+});
+test('invalid capture waits are rejected',()=>{
+  for(const wait_seconds of [-1,31,Infinity,NaN,'20',null])assert.throws(()=>validatePlan({...good,scenes:[{...good.scenes[0],wait_seconds}]},env),/wait_seconds/);
+  for(const wait_for_selector of [null,4,'','   ','x'.repeat(301)])assert.throws(()=>validatePlan({...good,scenes:[{...good.scenes[0],wait_for_selector}]},env),/wait_for_selector/);
+});
